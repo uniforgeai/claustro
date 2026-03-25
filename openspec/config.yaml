@@ -1,0 +1,18 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Go 1.23+, Cobra (CLI framework), Viper (config), Docker SDK for Go
+  Testing: Testify (assert/require), table-driven tests, //go:build integration for Docker tests
+  Logging: log/slog. Error handling: fmt.Errorf with %w wrapping.
+  Linting: golangci-lint
+  Commits: Conventional Commits (feat:, fix:, chore:, test:, refactor:, docs:), squash merges
+  Layout: standard Go (cmd/claustro/, internal/, pkg/)
+  Critical rule: ALL Docker operations via Docker SDK. Never shell out to docker CLI.
+  Domain: disposable Docker container sandbox manager for Claude Code
+  See openspec/project.md for full architecture, vocabulary, and milestones.
+
+rules:
+  tasks:
+    - Break tasks into single-package or single-command units of work
+    - Docker-dependent tasks must note the //go:build integration test requirement
+    - Each task must specify which internal/ package it touches
