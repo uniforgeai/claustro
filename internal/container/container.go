@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	networktypes "github.com/docker/docker/api/types/network"
+	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
@@ -206,6 +207,38 @@ func RemoveNetwork(ctx context.Context, cli *client.Client, networkName string) 
 	}
 	if err := cli.NetworkRemove(ctx, networks[0].ID); err != nil {
 		return fmt.Errorf("removing network: %w", err)
+	}
+	return nil
+}
+
+// EnsureVolume creates a named Docker volume if it does not already exist (idempotent).
+// Labels are applied to the volume on creation.
+func EnsureVolume(ctx context.Context, cli *client.Client, name string, labels map[string]string) error {
+	args := filters.NewArgs(filters.Arg("name", name))
+	list, err := cli.VolumeList(ctx, volumetypes.ListOptions{Filters: args})
+	if err != nil {
+		return fmt.Errorf("listing volumes: %w", err)
+	}
+	for _, v := range list.Volumes {
+		if v.Name == name {
+			return nil
+		}
+	}
+	_, err = cli.VolumeCreate(ctx, volumetypes.CreateOptions{
+		Name:   name,
+		Labels: labels,
+	})
+	if err != nil {
+		return fmt.Errorf("creating volume %q: %w", name, err)
+	}
+	return nil
+}
+
+// RemoveVolume removes a named Docker volume, ignoring not-found errors.
+func RemoveVolume(ctx context.Context, cli *client.Client, name string) error {
+	err := cli.VolumeRemove(ctx, name, false)
+	if err != nil && !client.IsErrNotFound(err) {
+		return fmt.Errorf("removing volume %q: %w", name, err)
 	}
 	return nil
 }

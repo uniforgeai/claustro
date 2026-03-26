@@ -97,6 +97,27 @@ func TestNetworkNameFromLabels(t *testing.T) {
 	assert.Equal(t, "claustro-myproject_default_net", NetworkNameFromLabels(labels))
 }
 
+func TestIdentity_VolumeName(t *testing.T) {
+	tests := []struct {
+		project string
+		name    string
+		purpose string
+		want    string
+	}{
+		{"myapp", "default", "npm", "claustro-myapp-default-npm"},
+		{"myapp", "default", "pip", "claustro-myapp-default-pip"},
+		{"myapp", "backend", "npm", "claustro-myapp-backend-npm"},
+		{"my-saas", "default", "npm", "claustro-my-saas-default-npm"},
+		{"my-saas", "backend", "pip", "claustro-my-saas-backend-pip"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			id := &Identity{Project: tt.project, Name: tt.name}
+			assert.Equal(t, tt.want, id.VolumeName(tt.purpose))
+		})
+	}
+}
+
 func TestIdentity_Labels(t *testing.T) {
 	id := &Identity{Project: "my-saas", Name: "backend"}
 	labels := id.Labels()

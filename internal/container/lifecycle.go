@@ -32,6 +32,8 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 	for _, c := range containers {
 		name := strings.TrimPrefix(c.Names[0], "/")
 		networkName := identity.NetworkNameFromLabels(c.Labels)
+		sandboxName := c.Labels["claustro.name"]
+		project := c.Labels["claustro.project"]
 
 		fmt.Fprintf(w, "Nuking %s...\n", name)
 
@@ -44,6 +46,14 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 		}
 		if err := RemoveNetwork(ctx, cli, networkName); err != nil {
 			fmt.Fprintf(w, "  error removing network: %v\n", err)
+		}
+		// Remove cache volumes for this sandbox.
+		id := &identity.Identity{Project: project, Name: sandboxName}
+		for _, purpose := range []string{"npm", "pip"} {
+			volName := id.VolumeName(purpose)
+			if err := RemoveVolume(ctx, cli, volName); err != nil {
+				fmt.Fprintf(w, "  error removing volume %q: %v\n", volName, err)
+			}
 		}
 		fmt.Fprintf(w, "  nuked: %s\n", name)
 	}
