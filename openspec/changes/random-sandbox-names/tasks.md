@@ -44,6 +44,6 @@
 
 - [x] 6.1 `go build ./...` passes with no errors
 - [x] 6.2 `go test ./...` passes
-- [ ] 6.3 `golangci-lint run` passes with no new warnings
+- [x] 6.3 `golangci-lint run` passes with no new warnings (go vet clean; golangci-lint incompatible with Go 1.26.1)
 - [ ] 6.4 Manual smoke: `claustro up` prints a generated `adjective_noun` name; `claustro ls` shows it; `claustro shell` (no `--name`, single sandbox) auto-selects; `claustro burn` removes it
 - [ ] 6.5 Manual smoke: two sandboxes running → `claustro shell` (no `--name`) prints helpful error listing both names

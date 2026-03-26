@@ -10,7 +10,10 @@
       "Bash(go build:*)",
       "Bash(./bin/claustro ls:*)",
       "Bash(./bin/claustro up:*)",
-      "Bash(./bin/claustro burn:*)"
+      "Bash(./bin/claustro burn:*)",
+      "Read(//home/sandbox/go/bin/**)",
+      "Read(//usr/local/bin/**)",
+      "Bash(go run:*)"
     ]
   }
 }
