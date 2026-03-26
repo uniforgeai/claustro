@@ -7,12 +7,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/docker/docker/api/types/mount"
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
-	"github.com/uniforgeai/claustro/internal/mount"
+	internalMount "github.com/uniforgeai/claustro/internal/mount"
 )
 
 func newUpCmd() *cobra.Command {
@@ -68,9 +69,29 @@ func runUp(ctx context.Context, name string) error {
 		}
 	}
 
-	mounts, err := mount.Assemble(id.HostPath, &cfg.Git)
+	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git)
 	if err != nil {
 		return fmt.Errorf("assembling mounts: %w", err)
+	}
+
+	// Ensure npm and pip cache volumes exist, then mount them.
+	labels := id.Labels()
+	for _, vol := range []struct {
+		purpose string
+		target  string
+	}{
+		{"npm", "/home/sandbox/.npm"},
+		{"pip", "/home/sandbox/.cache/pip"},
+	} {
+		volName := id.VolumeName(vol.purpose)
+		if err := container.EnsureVolume(ctx, cli, volName, labels); err != nil {
+			return fmt.Errorf("ensuring volume %q: %w", volName, err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volName,
+			Target: vol.target,
+		})
 	}
 
 	slog.Info("creating sandbox", "container", id.ContainerName())
