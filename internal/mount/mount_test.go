@@ -8,10 +8,13 @@ import (
 	dockermount "github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uniforgeai/claustro/internal/config"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestAssemble_basicMounts(t *testing.T) {
-	mounts, err := Assemble("/some/project")
+	mounts, err := Assemble("/some/project", nil)
 	require.NoError(t, err)
 
 	// Must always have at least workspace + .claude
@@ -30,7 +33,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 	claudeJSON := filepath.Join(home, ".claude.json")
 	exists := fileExists(claudeJSON)
 
-	mounts, err := Assemble("/some/project")
+	mounts, err := Assemble("/some/project", nil)
 	require.NoError(t, err)
 
 	found := false
@@ -44,7 +47,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 }
 
 func TestAssemble_allMountsAreBind(t *testing.T) {
-	mounts, err := Assemble("/any/path")
+	mounts, err := Assemble("/any/path", nil)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.Equal(t, dockermount.TypeBind, m.Type)
@@ -66,4 +69,55 @@ func assertMount(t *testing.T, mounts []dockermount.Mount, src, tgt string, typ 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func TestAssemble_gitconfigDisabled(t *testing.T) {
+	git := &config.GitConfig{MountGitconfig: boolPtr(false)}
+	mounts, err := Assemble("/some/project", git)
+	require.NoError(t, err)
+	for _, m := range mounts {
+		assert.NotEqual(t, "/home/sandbox/.gitconfig", m.Target, "gitconfig mount should be absent when disabled")
+	}
+}
+
+func TestAssemble_sshDirNotMountedByDefault(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil)
+	require.NoError(t, err)
+	for _, m := range mounts {
+		assert.NotEqual(t, "/home/sandbox/.ssh", m.Target, "~/.ssh should not be mounted by default")
+	}
+}
+
+func TestAssemble_sshDirMountedWhenEnabled(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	sshDir := filepath.Join(home, ".ssh")
+	if !fileExists(sshDir) {
+		t.Skip("~/.ssh does not exist on this machine")
+	}
+
+	git := &config.GitConfig{MountSSHDir: boolPtr(true)}
+	mounts, err := Assemble("/some/project", git)
+	require.NoError(t, err)
+
+	found := false
+	for _, m := range mounts {
+		if m.Target == "/home/sandbox/.ssh" {
+			found = true
+			assert.Equal(t, sshDir, m.Source)
+			assert.True(t, m.ReadOnly)
+		}
+	}
+	assert.True(t, found, "~/.ssh mount should be present when explicitly enabled")
+}
+
+func TestAssemble_agentForwardingDisabled(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/fake.sock")
+	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
+	mounts, err := Assemble("/some/project", git)
+	require.NoError(t, err)
+	for _, m := range mounts {
+		assert.NotEqual(t, "/tmp/fake.sock", m.Target, "SSH agent socket should not be mounted when disabled")
+	}
 }

@@ -52,6 +52,29 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func boolPtr(b bool) *bool { return &b }
+
+func TestGitConfig_defaults(t *testing.T) {
+	var g GitConfig
+	assert.True(t, g.IsForwardAgent(), "ForwardAgent defaults to true")
+	assert.True(t, g.IsMountGitconfig(), "MountGitconfig defaults to true")
+	assert.True(t, g.IsMountGhConfig(), "MountGhConfig defaults to true")
+	assert.False(t, g.IsMountSSHDir(), "MountSSHDir defaults to false")
+}
+
+func TestGitConfig_explicitOverrides(t *testing.T) {
+	g := GitConfig{
+		ForwardAgent:   boolPtr(false),
+		MountGitconfig: boolPtr(false),
+		MountGhConfig:  boolPtr(false),
+		MountSSHDir:    boolPtr(true),
+	}
+	assert.False(t, g.IsForwardAgent())
+	assert.False(t, g.IsMountGitconfig())
+	assert.False(t, g.IsMountGhConfig())
+	assert.True(t, g.IsMountSSHDir())
+}
+
 func TestLoad_ExtraStepFields(t *testing.T) {
 	dir := t.TempDir()
 	content := `

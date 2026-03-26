@@ -35,13 +35,18 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		imageName = image.ImageName
 	}
 
+	env := []string{
+		"CLAUSTRO_HOST_PATH=" + id.HostPath,
+		"HOME=/home/sandbox",
+	}
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		env = append(env, "SSH_AUTH_SOCK="+sock)
+	}
+
 	cfg := &containertypes.Config{
-		Image: imageName,
+		Image:  imageName,
 		Labels: id.Labels(),
-		Env: []string{
-			"CLAUSTRO_HOST_PATH=" + id.HostPath,
-			"HOME=/home/sandbox",
-		},
+		Env:    env,
 		Tty:          false,
 		AttachStdin:  false,
 		AttachStdout: false,

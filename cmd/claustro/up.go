@@ -68,7 +68,7 @@ func runUp(ctx context.Context, name string) error {
 		}
 	}
 
-	mounts, err := mount.Assemble(id.HostPath)
+	mounts, err := mount.Assemble(id.HostPath, &cfg.Git)
 	if err != nil {
 		return fmt.Errorf("assembling mounts: %w", err)
 	}
