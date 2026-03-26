@@ -16,15 +16,27 @@ import (
 	"github.com/uniforgeai/claustro/internal/image"
 )
 
+// CreateOptions configures optional parameters for container creation.
+type CreateOptions struct {
+	// ImageName overrides the default claustro:latest image.
+	// If empty, image.ImageName is used.
+	ImageName string
+}
+
 // Create creates (but does not start) a sandbox container.
-func Create(ctx context.Context, cli *client.Client, id *identity.Identity, mounts []mount.Mount) (string, error) {
+func Create(ctx context.Context, cli *client.Client, id *identity.Identity, mounts []mount.Mount, opts CreateOptions) (string, error) {
 	// Ensure the sandbox network exists
 	if err := ensureNetwork(ctx, cli, id); err != nil {
 		return "", fmt.Errorf("ensuring network: %w", err)
 	}
 
+	imageName := opts.ImageName
+	if imageName == "" {
+		imageName = image.ImageName
+	}
+
 	cfg := &containertypes.Config{
-		Image: image.ImageName,
+		Image: imageName,
 		Labels: id.Labels(),
 		Env: []string{
 			"CLAUSTRO_HOST_PATH=" + id.HostPath,

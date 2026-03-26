@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
@@ -49,8 +50,22 @@ func runUp(ctx context.Context, name string) error {
 		return nil
 	}
 
-	if err := image.EnsureBuilt(ctx, cli, os.Stdout); err != nil {
-		return fmt.Errorf("building image: %w", err)
+	cfg, err := config.Load(id.HostPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	var opts container.CreateOptions
+	if len(cfg.Image.Extra) > 0 {
+		steps := extraRunSteps(cfg.Image.Extra)
+		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
+			return fmt.Errorf("building extension image: %w", err)
+		}
+		opts.ImageName = image.ExtImageName(id.Project)
+	} else {
+		if err := image.EnsureBuilt(ctx, cli, os.Stdout); err != nil {
+			return fmt.Errorf("building image: %w", err)
+		}
 	}
 
 	mounts, err := mount.Assemble(id.HostPath)
@@ -59,7 +74,7 @@ func runUp(ctx context.Context, name string) error {
 	}
 
 	slog.Info("creating sandbox", "container", id.ContainerName())
-	containerID, err := container.Create(ctx, cli, id, mounts)
+	containerID, err := container.Create(ctx, cli, id, mounts, opts)
 	if err != nil {
 		return fmt.Errorf("creating container: %w", err)
 	}
@@ -71,4 +86,13 @@ func runUp(ctx context.Context, name string) error {
 	fmt.Printf("  Run: claustro shell  —  open a shell\n")
 	fmt.Printf("  Run: claustro claude —  start Claude Code\n")
 	return nil
+}
+
+// extraRunSteps extracts the Run strings from a slice of ExtraStep.
+func extraRunSteps(steps []config.ExtraStep) []string {
+	out := make([]string, len(steps))
+	for i, s := range steps {
+		out[i] = s.Run
+	}
+	return out
 }
