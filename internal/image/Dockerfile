@@ -41,7 +41,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @anthropic-ai/claude-code ccstatusline
 
 # Create non-root sandbox user at uid 1000
 # Ubuntu 24.04 ships with uid 1000 ('ubuntu') — delete it first
