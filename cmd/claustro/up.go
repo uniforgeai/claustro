@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
@@ -15,24 +14,22 @@ import (
 	"github.com/uniforgeai/claustro/internal/mount"
 )
 
-var upCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Create and start a sandbox",
-	Long:  "Build the claustro image if needed, then create and start a sandbox container.",
-	RunE:  runUp,
+func newUpCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "up",
+		Short: "Create and start a sandbox",
+		Long:  "Build the claustro image if needed, then create and start a sandbox container.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runUp(cmd.Context(), name)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	return cmd
 }
 
-var upName string
-
-func init() {
-	upCmd.Flags().StringVar(&upName, "name", "", "Sandbox name (default: \"default\")")
-	rootCmd.AddCommand(upCmd)
-}
-
-func runUp(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
-	id, err := identity.FromCWD(upName)
+func runUp(ctx context.Context, name string) error {
+	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -41,30 +38,26 @@ func runUp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer cli.Close() //nolint:errcheck
 
-	// Check if already running
 	existing, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("finding sandbox: %w", err)
 	}
 	if existing != nil && strings.Contains(existing.Status, "Up") {
 		fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
 		return nil
 	}
 
-	// Ensure image exists
-	if err := image.EnsureBuilt(ctx, cli); err != nil {
+	if err := image.EnsureBuilt(ctx, cli, os.Stdout); err != nil {
 		return fmt.Errorf("building image: %w", err)
 	}
 
-	// Assemble mounts
 	mounts, err := mount.Assemble(id.HostPath)
 	if err != nil {
 		return fmt.Errorf("assembling mounts: %w", err)
 	}
 
-	// Create and start
 	slog.Info("creating sandbox", "container", id.ContainerName())
 	containerID, err := container.Create(ctx, cli, id, mounts)
 	if err != nil {
@@ -78,25 +71,4 @@ func runUp(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Run: claustro shell  —  open a shell\n")
 	fmt.Printf("  Run: claustro claude —  start Claude Code\n")
 	return nil
-}
-
-func newDockerClient() (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, fmt.Errorf("connecting to Docker: %w", err)
-	}
-	return cli, nil
-}
-
-func exitIfNotRunning(name string) {
-	fmt.Fprintf(os.Stderr, "No running sandbox %q found. Run: claustro up%s\n",
-		name, nameFlag(name))
-	os.Exit(1)
-}
-
-func nameFlag(name string) string {
-	if name != "" && name != "default" {
-		return " --name " + name
-	}
-	return ""
 }

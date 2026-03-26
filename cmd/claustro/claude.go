@@ -9,25 +9,23 @@ import (
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-var claudeCmd = &cobra.Command{
-	Use:   "claude",
-	Short: "Launch Claude Code inside a running sandbox",
-	Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Pass extra args after '--'.",
-	RunE:  runClaude,
+func newClaudeCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "claude",
+		Short: "Launch Claude Code inside a running sandbox",
+		Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Pass extra args after '--'.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runClaude(cmd.Context(), name, args)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().SetInterspersed(false)
+	return cmd
 }
 
-var claudeName string
-
-func init() {
-	claudeCmd.Flags().StringVar(&claudeName, "name", "", "Sandbox name (default: \"default\")")
-	claudeCmd.Flags().SetInterspersed(false) // allow -- to pass args through
-	rootCmd.AddCommand(claudeCmd)
-}
-
-func runClaude(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
-	id, err := identity.FromCWD(claudeName)
+func runClaude(ctx context.Context, name string, extraArgs []string) error {
+	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -36,17 +34,16 @@ func runClaude(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer cli.Close() //nolint:errcheck
 
 	c, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("finding sandbox: %w", err)
 	}
 	if c == nil {
-		exitIfNotRunning(claudeName)
-		return nil
+		return errNotRunning(id)
 	}
 
-	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, args...)
+	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, extraArgs...)
 	return container.Exec(ctx, cli, c.ID, execCmd, true)
 }

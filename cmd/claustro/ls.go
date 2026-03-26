@@ -3,31 +3,29 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-var lsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List sandboxes for the current project",
-	RunE:  runLs,
+func newLsCmd() *cobra.Command {
+	var all bool
+	cmd := &cobra.Command{
+		Use:   "ls",
+		Short: "List sandboxes for the current project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runLs(cmd.Context(), all)
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "List sandboxes across all projects")
+	return cmd
 }
 
-var lsAll bool
-
-func init() {
-	lsCmd.Flags().BoolVar(&lsAll, "all", false, "List sandboxes across all projects")
-	rootCmd.AddCommand(lsCmd)
-}
-
-func runLs(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
+func runLs(ctx context.Context, all bool) error {
 	id, err := identity.FromCWD("")
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -37,15 +35,15 @@ func runLs(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer cli.Close() //nolint:errcheck
 
-	containers, err := container.ListByProject(ctx, cli, id.Project, lsAll)
+	containers, err := container.ListByProject(ctx, cli, id.Project, all)
 	if err != nil {
-		return err
+		return fmt.Errorf("listing sandboxes: %w", err)
 	}
 
 	if len(containers) == 0 {
-		if lsAll {
+		if all {
 			fmt.Println("No claustro sandboxes found.")
 		} else {
 			fmt.Printf("No sandboxes for project %q. Run: claustro up\n", id.Project)
@@ -54,7 +52,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	if lsAll {
+	if all {
 		fmt.Fprintln(w, "PROJECT\tNAME\tCONTAINER\tSTATUS")
 	} else {
 		fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
@@ -64,7 +62,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 		name := c.Labels["claustro.name"]
 		project := c.Labels["claustro.project"]
 		containerName := strings.TrimPrefix(c.Names[0], "/")
-		if lsAll {
+		if all {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", project, name, containerName, c.Status)
 		} else {
 			fmt.Fprintf(w, "%s\t%s\t%s\n", name, containerName, c.Status)

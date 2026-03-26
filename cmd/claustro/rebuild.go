@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -11,64 +11,34 @@ import (
 	"github.com/uniforgeai/claustro/internal/image"
 )
 
-var rebuildCmd = &cobra.Command{
-	Use:   "rebuild",
-	Short: "Rebuild the claustro Docker image",
-	Long:  "Forces a full rebuild of the claustro:latest image from the embedded Dockerfile.",
-	RunE:  runRebuild,
+func newRebuildCmd() *cobra.Command {
+	var restart bool
+	cmd := &cobra.Command{
+		Use:   "rebuild",
+		Short: "Rebuild the claustro Docker image",
+		Long:  "Forces a full rebuild of the claustro:latest image from the embedded Dockerfile.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRebuild(cmd.Context(), restart)
+		},
+	}
+	cmd.Flags().BoolVar(&restart, "restart", false, "Stop project sandboxes before rebuild and restart after")
+	return cmd
 }
 
-var rebuildRestart bool
-
-func init() {
-	rebuildCmd.Flags().BoolVar(&rebuildRestart, "restart", false, "Stop project sandboxes before rebuild and restart after")
-	rootCmd.AddCommand(rebuildCmd)
-}
-
-func runRebuild(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
+func runRebuild(ctx context.Context, restart bool) error {
 	cli, err := newDockerClient()
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer cli.Close() //nolint:errcheck
 
-	if rebuildRestart {
+	if restart {
 		id, err := identity.FromCWD("")
 		if err != nil {
 			return fmt.Errorf("resolving identity: %w", err)
 		}
-
-		containers, err := container.ListByProject(ctx, cli, id.Project, false)
-		if err != nil {
-			return err
-		}
-
-		// Stop all sandboxes first
-		for _, c := range containers {
-			name := strings.TrimPrefix(c.Names[0], "/")
-			fmt.Printf("Stopping %s...\n", name)
-			if err := container.Stop(ctx, cli, c.ID); err != nil {
-				fmt.Printf("  (stop: %v — continuing)\n", err)
-			}
-		}
-
-		// Rebuild
-		if err := image.Build(ctx, cli); err != nil {
-			return fmt.Errorf("rebuilding image: %w", err)
-		}
-
-		// Restart all sandboxes
-		for _, c := range containers {
-			name := strings.TrimPrefix(c.Names[0], "/")
-			fmt.Printf("Restarting %s...\n", name)
-			if err := container.Start(ctx, cli, c.ID); err != nil {
-				fmt.Printf("  error restarting %s: %v\n", name, err)
-			}
-		}
-		return nil
+		return container.RebuildRestart(ctx, cli, id.Project, os.Stdout)
 	}
 
-	return image.Build(ctx, cli)
+	return image.Build(ctx, cli, os.Stdout)
 }
