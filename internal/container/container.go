@@ -37,7 +37,12 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 	}
 
 	hostCfg := &containertypes.HostConfig{
-		Mounts: mounts,
+		Mounts:      mounts,
+		SecurityOpt: []string{"no-new-privileges:true"},
+		Resources: containertypes.Resources{
+			NanoCPUs: 4_000_000_000,
+			Memory:   8 * 1024 * 1024 * 1024,
+		},
 	}
 
 	netCfg := &networktypes.NetworkingConfig{
@@ -192,7 +197,7 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 	args := filters.NewArgs(filters.Arg("name", "^"+id.NetworkName()+"$"))
 	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})
 	if err != nil {
-		return err
+		return fmt.Errorf("listing networks: %w", err)
 	}
 	if len(networks) > 0 {
 		return nil
@@ -201,5 +206,8 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 		Driver: "bridge",
 		Labels: id.Labels(),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("creating network: %w", err)
+	}
+	return nil
 }

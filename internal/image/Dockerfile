@@ -43,9 +43,10 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv \
 # Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root sandbox user
-# Ubuntu 24.04 already has uid 1000 ('ubuntu') — use uid 9999
-RUN useradd --uid 9999 --no-log-init --create-home --shell /bin/zsh sandbox
+# Create non-root sandbox user at uid 1000
+# Ubuntu 24.04 ships with uid 1000 ('ubuntu') — delete it first
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && useradd --uid 1000 --no-log-init --create-home --shell /bin/zsh sandbox
 
 # Copy and install the claustro init entrypoint
 COPY claustro-init /usr/local/bin/claustro-init
@@ -54,6 +55,7 @@ RUN chmod +x /usr/local/bin/claustro-init
 # Rust for sandbox user
 RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
     && cp -r /root/.cargo /home/sandbox/.cargo \
+    && cp -r /root/.rustup /home/sandbox/.rustup \
     && chown -R sandbox:sandbox /home/sandbox
 
 ENV HOME=/home/sandbox

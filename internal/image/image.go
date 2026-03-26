@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 
 	_ "embed"
 
@@ -27,8 +28,8 @@ var initScript []byte
 const ImageName = "claustro:latest"
 
 // EnsureBuilt checks whether the claustro image exists and builds it if not.
-// Build output is streamed to stdout.
-func EnsureBuilt(ctx context.Context, cli *client.Client) error {
+// Build output is written to w.
+func EnsureBuilt(ctx context.Context, cli *client.Client, w io.Writer) error {
 	exists, err := imageExists(ctx, cli)
 	if err != nil {
 		return fmt.Errorf("checking image: %w", err)
@@ -36,14 +37,15 @@ func EnsureBuilt(ctx context.Context, cli *client.Client) error {
 	if exists {
 		return nil
 	}
-	fmt.Printf("Building image %s (this may take a few minutes on first run)...\n", ImageName)
-	return buildImage(ctx, cli)
+	slog.Info("building image", "image", ImageName)
+	return buildImage(ctx, cli, false, w)
 }
 
 // Build forces a full rebuild of the claustro image regardless of whether it exists.
-func Build(ctx context.Context, cli *client.Client) error {
-	fmt.Printf("Rebuilding image %s...\n", ImageName)
-	return buildImage(ctx, cli)
+// Build output is written to w.
+func Build(ctx context.Context, cli *client.Client, w io.Writer) error {
+	slog.Info("rebuilding image", "image", ImageName)
+	return buildImage(ctx, cli, true, w)
 }
 
 func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
@@ -55,7 +57,7 @@ func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
 	return len(images) > 0, nil
 }
 
-func buildImage(ctx context.Context, cli *client.Client) error {
+func buildImage(ctx context.Context, cli *client.Client, noCache bool, w io.Writer) error {
 	buildCtx, err := buildContext()
 	if err != nil {
 		return fmt.Errorf("creating build context: %w", err)
@@ -65,13 +67,14 @@ func buildImage(ctx context.Context, cli *client.Client) error {
 		Tags:       []string{ImageName},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
+		NoCache:    noCache,
 	})
 	if err != nil {
 		return fmt.Errorf("starting image build: %w", err)
 	}
 	defer resp.Body.Close()
 
-	return streamBuildOutput(resp.Body)
+	return streamBuildOutput(resp.Body, w)
 }
 
 // buildContext creates an in-memory tar archive containing the Dockerfile and init script.
@@ -112,7 +115,7 @@ type buildMessage struct {
 	Error  string `json:"error"`
 }
 
-func streamBuildOutput(r io.Reader) error {
+func streamBuildOutput(r io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		var msg buildMessage
@@ -123,7 +126,7 @@ func streamBuildOutput(r io.Reader) error {
 			return fmt.Errorf("image build failed: %s", msg.Error)
 		}
 		if msg.Stream != "" {
-			fmt.Print(msg.Stream)
+			fmt.Fprint(w, msg.Stream)
 		}
 	}
 	return scanner.Err()
