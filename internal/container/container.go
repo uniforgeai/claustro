@@ -96,6 +96,9 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		User:         "sandbox",
 		WorkingDir:   "/workspace",
 	}
+	if interactive {
+		execCfg.Env = termEnv()
+	}
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
 	if err != nil {
@@ -109,10 +112,24 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 	defer resp.Close()
 
 	if interactive {
-		// Set raw terminal mode for interactive sessions
+		// Set raw terminal mode for interactive sessions.
 		if err := setRawTerminal(); err == nil {
 			defer restoreTerminal()
 		}
+
+		fd := int(os.Stdin.Fd())
+
+		// Set the container PTY to the host terminal's current dimensions.
+		w, h := getTerminalSize(fd)
+		_ = cli.ContainerExecResize(ctx, execID.ID, containertypes.ResizeOptions{Width: w, Height: h})
+
+		// Forward future resize events for the lifetime of this session.
+		resizeCtx, cancelResize := context.WithCancel(ctx)
+		defer cancelResize()
+		go monitorResizeEvents(resizeCtx, cli, execID.ID, fd)
+
+		// When Tty=true Docker streams raw PTY bytes without the 8-byte
+		// multiplexing header, so plain io.Copy is correct here.
 		go io.Copy(resp.Conn, os.Stdin)  //nolint:errcheck
 		io.Copy(os.Stdout, resp.Reader)  //nolint:errcheck
 	} else {
