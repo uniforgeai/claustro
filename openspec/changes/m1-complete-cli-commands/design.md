@@ -10,7 +10,7 @@ The walking skeleton landed `up`, `burn`, `shell`, `claude`, and `ls`. The inter
 - Keep command files thin — business logic lives in `internal/` packages.
 
 **Non-Goals:**
-- Config file support (`sandbox.yaml`) — that is M2.
+- Config file support (`claustro.yaml`) — that is M2.
 - Firewall or MCP integration — that is M3.
 - Changing any existing command behavior.
 

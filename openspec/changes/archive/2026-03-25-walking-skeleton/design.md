@@ -18,7 +18,7 @@ This design covers the full walking skeleton: Go module setup, internal package 
 - Sandbox identity from CWD basename + `--name` flag
 
 **Non-Goals:**
-- `sandbox.yaml` config file (M2)
+- `claustro.yaml` config file (M2)
 - Named sandboxes beyond `--name` flag (M2)
 - Egress firewall (M3)
 - MCP server support (M3)
@@ -93,7 +93,7 @@ All containers created by claustro get a label `claustro.project={project}` for 
 - **Symlink fragility** → The symlink approach works but is invisible to the user. If they're confused why `/Users/pepusz/code/foo` exists inside the container, it might be surprising. Mitigation: document in README, log it during `up`.
 - **Image build time** → First `up` builds a ~1-2 GB image with all runtimes. Could take 3-5 minutes. Mitigation: print a progress indicator; subsequent runs use the cached image.
 - **`~/.claude.json` not persisted if created inside container** → If the user runs `claude login` inside a fresh container and `~/.claude.json` doesn't exist on the host, the new `.claude.json` won't be on the host. Mitigation: document; full fix in M2 via additional mount.
-- **Single default sandbox** → M1 only supports `--name` flag for identity, no `sandbox.yaml`. Fine for walking skeleton scope.
+- **Single default sandbox** → M1 only supports `--name` flag for identity, no `claustro.yaml`. Fine for walking skeleton scope.
 
 ## Open Questions
 
