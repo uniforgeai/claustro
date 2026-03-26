@@ -65,6 +65,22 @@ func monitorResizeEvents(ctx context.Context, apiClient client.APIClient, execID
 	}
 }
 
+// gitEnv returns Git environment variables to inject into interactive exec sessions.
+// When the host SSH agent is available (SSH_AUTH_SOCK set), it overrides
+// gpg.ssh.program to ssh-keygen, which uses the forwarded agent for commit
+// signing. This replaces host-specific signing helpers (e.g. op-ssh-sign) that
+// do not exist inside the container.
+func gitEnv() []string {
+	if os.Getenv("SSH_AUTH_SOCK") == "" {
+		return nil
+	}
+	return []string{
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=gpg.ssh.program",
+		"GIT_CONFIG_VALUE_0=ssh-keygen",
+	}
+}
+
 // termEnv returns terminal-related environment variables read from the host,
 // suitable for injecting into interactive exec sessions. TERM defaults to
 // xterm-256color when not set on the host.

@@ -109,7 +109,7 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		WorkingDir:   "/workspace",
 	}
 	if opts.Interactive {
-		execCfg.Env = termEnv()
+		execCfg.Env = append(termEnv(), gitEnv()...)
 	}
 
 	// Start clipboard bridge for interactive sessions when a socket dir is provided.
