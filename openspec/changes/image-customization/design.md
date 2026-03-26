@@ -2,14 +2,14 @@
 
 The claustro image pipeline today: `internal/image/image.go` embeds `Dockerfile` and `claustro-init` at compile time, builds a single `claustro:latest` image, and every sandbox uses that image. There is no per-project image variant and no config-driven customization.
 
-`internal/config/` does not yet exist — it will be created as part of M2. This change introduces the `sandbox.yaml` schema and config loading as a prerequisite for image extensions.
+`internal/config/` does not yet exist — it will be created as part of M2. This change introduces the `claustro.yaml` schema and config loading as a prerequisite for image extensions.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Add `ccstatusline` to the base image npm installs — zero user effort required.
-- Allow `sandbox.yaml` to declare `image.extra` RUN steps appended as a thin layer over `claustro:latest`.
-- Keep the base image unchanged for projects that have no `sandbox.yaml` or no `image.extra` block.
+- Allow `claustro.yaml` to declare `image.extra` RUN steps appended as a thin layer over `claustro:latest`.
+- Keep the base image unchanged for projects that have no `claustro.yaml` or no `image.extra` block.
 - Spec the adaptive image feature clearly enough that it can be implemented in a future change.
 
 **Non-Goals:**
@@ -30,7 +30,7 @@ RUN npm install -g @anthropic-ai/claude-code ccstatusline
 
 ### image.extra: extension layer via a generated Dockerfile
 
-When `sandbox.yaml` contains an `image.extra` block, claustro generates a minimal `Dockerfile.ext` in memory:
+When `claustro.yaml` contains an `image.extra` block, claustro generates a minimal `Dockerfile.ext` in memory:
 
 ```dockerfile
 FROM claustro:latest
@@ -44,7 +44,7 @@ This is built as a new image tagged `claustro-{project}:latest`. Sandboxes for t
 
 **Image tag format**: `claustro-{project}:latest` (e.g. `claustro-myapp:latest`). This is derived from the sandbox identity's `Project` slug — consistent with container and network naming.
 
-### sandbox.yaml schema for image.extra
+### claustro.yaml schema for image.extra
 
 ```yaml
 image:
@@ -58,7 +58,7 @@ Each entry under `extra` is a `run` key containing a shell command that becomes 
 
 ### config loading: internal/config package
 
-`internal/config` will use Viper to load `sandbox.yaml` from the project root (same directory as the CWD when claustro is invoked). The loaded config is passed into `up.go` to inform image selection.
+`internal/config` will use Viper to load `claustro.yaml` from the project root (same directory as the CWD when claustro is invoked). The loaded config is passed into `up.go` to inform image selection.
 
 Key type:
 ```go
@@ -81,9 +81,9 @@ type ExtraStep struct {
 1. Call `image.EnsureExtended(ctx, cli, project, config.Image.Extra, os.Stdout)` — builds `claustro-{project}:latest` if not present.
 2. Pass the extended image name to `container.Create`.
 
-If `config.Image.Extra` is empty (or no `sandbox.yaml`), behaviour is unchanged: uses `claustro:latest`.
+If `config.Image.Extra` is empty (or no `claustro.yaml`), behaviour is unchanged: uses `claustro:latest`.
 
-`EnsureExtended` checks if `claustro-{project}:latest` exists **and** whether its label `claustro.ext-hash` matches a hash of the `extra` steps. If the hash differs, the extension image is rebuilt. This prevents stale extension images after `sandbox.yaml` changes.
+`EnsureExtended` checks if `claustro-{project}:latest` exists **and** whether its label `claustro.ext-hash` matches a hash of the `extra` steps. If the hash differs, the extension image is rebuilt. This prevents stale extension images after `claustro.yaml` changes.
 
 ### rebuild command: rebuild extension image too
 
@@ -111,7 +111,7 @@ This section captures the design intent so it can be properly scoped and tasked 
 - Should this produce a separate image per runtime combination, or use BuildKit `--target` stages?
 - How does this interact with `image.extra`? (Extensions might assume a runtime is present.)
 - What is the re-scan trigger? (File changes, manual `claustro scan`, or always-on during `up`?)
-- What is the UX for "I need Go but my project doesn't have Go files yet"? (Override in `sandbox.yaml`?)
+- What is the UX for "I need Go but my project doesn't have Go files yet"? (Override in `claustro.yaml`?)
 - What is the build-time cost of N separate Dockerfile stages vs. a single polyglot image?
 
 **Decision**: Do not implement until these questions are answered. Track as a separate change after M2.
@@ -120,6 +120,6 @@ This section captures the design intent so it can be properly scoped and tasked 
 
 ## Risks / Trade-offs
 
-- **Extension image stale detection via hash**: The `claustro.ext-hash` label approach requires that `extra` steps be deterministic and order-sensitive. Reordering steps in `sandbox.yaml` will trigger a rebuild even if the net effect is identical. This is acceptable — determinism is more important than avoiding spurious rebuilds.
+- **Extension image stale detection via hash**: The `claustro.ext-hash` label approach requires that `extra` steps be deterministic and order-sensitive. Reordering steps in `claustro.yaml` will trigger a rebuild even if the net effect is identical. This is acceptable — determinism is more important than avoiding spurious rebuilds.
 - **Extension image cleanup**: `claustro nuke` and `claustro burn` only remove containers, not images. Extension images (`claustro-{project}:latest`) will accumulate unless the user manually prunes. A future `claustro prune` command can address this.
-- **`sandbox.yaml` not yet loaded in M1 commands**: `up` currently doesn't read any config. Adding config loading is an additive change; commands without `sandbox.yaml` present will behave identically to today.
+- **`claustro.yaml` not yet loaded in M1 commands**: `up` currently doesn't read any config. Adding config loading is an additive change; commands without `claustro.yaml` present will behave identically to today.

@@ -17,7 +17,7 @@ func TestLoad_MissingFile(t *testing.T) {
 
 func TestLoad_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
-	err := os.WriteFile(filepath.Join(dir, "sandbox.yaml"), []byte(""), 0644)
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(""), 0644)
 	require.NoError(t, err)
 
 	cfg, err := Load(dir)
@@ -33,7 +33,7 @@ image:
     - run: apt-get install -y ffmpeg
     - run: pip install black
 `
-	err := os.WriteFile(filepath.Join(dir, "sandbox.yaml"), []byte(content), 0644)
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
 	require.NoError(t, err)
 
 	cfg, err := Load(dir)
@@ -45,7 +45,7 @@ image:
 
 func TestLoad_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	err := os.WriteFile(filepath.Join(dir, "sandbox.yaml"), []byte("image:\n  extra:\n    - {bad yaml"), 0644)
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte("image:\n  extra:\n    - {bad yaml"), 0644)
 	require.NoError(t, err)
 
 	_, err = Load(dir)
@@ -82,7 +82,7 @@ image:
   extra:
     - run: npm install -g prettier
 `
-	err := os.WriteFile(filepath.Join(dir, "sandbox.yaml"), []byte(content), 0644)
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
 	require.NoError(t, err)
 
 	cfg, err := Load(dir)

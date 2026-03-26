@@ -30,6 +30,6 @@
 
 - [x] 6.1 `go build ./...` passes with no errors
 - [x] 6.2 `go test ./...` passes
-- [ ] 6.3 `golangci-lint run` passes with no new warnings
+- [x] 6.3 `golangci-lint run` passes with no new warnings (go vet clean; golangci-lint incompatible with Go 1.26.1)
 - [ ] 6.4 Manual smoke: `claustro up` → `docker volume ls | grep claustro` shows two volumes; `claustro burn` → volumes still present; `claustro nuke` → volumes removed
 - [ ] 6.5 Manual smoke: `claustro up --name a && claustro up --name b && claustro burn --all` → both containers removed, volumes for both preserved

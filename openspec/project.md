@@ -23,7 +23,7 @@ A Go CLI that manages disposable Docker containers for running Claude Code safel
 
 ```
 cmd/claustro/       → CLI entrypoint and Cobra commands
-internal/config     → sandbox.yaml + Viper config loading
+internal/config     → claustro.yaml + Viper config loading
 internal/identity   → sandbox naming: {project}_{name} derived from CWD
 internal/container  → Docker SDK wrapper: create, start, stop, remove, exec
 internal/image      → image build/pull/rebuild logic
@@ -52,7 +52,7 @@ internal/mcp        → MCP server lifecycle (stdio pre-install, SSE sibling con
 | burn | Remove a container but keep the image and cache volumes |
 | nuke | Remove a container AND its cache volumes |
 | workspace | The `/workspace` path inside the container where source is mounted |
-| sandbox.yaml | Per-project configuration file for claustro |
+| claustro.yaml | Per-project configuration file for claustro |
 | MCP server | Model Context Protocol server — either stdio (in-container) or SSE (sibling container) |
 
 ## Milestones
@@ -60,6 +60,6 @@ internal/mcp        → MCP server lifecycle (stdio pre-install, SSE sibling con
 | Milestone | Scope |
 |---|---|
 | M1 | Core CLI + container lifecycle: `up`, `burn`, `nuke`, `rebuild`, `shell`, `claude`, `exec`, `status`, `logs`, `ls` |
-| M2 | Multi-sandbox + `sandbox.yaml` config, `--workdir`, `--mount`, `.env` support |
+| M2 | Multi-sandbox + `claustro.yaml` config, `--workdir`, `--mount`, `.env` support |
 | M3 | Egress firewall (iptables), stdio MCP pre-install, SSE MCP sibling containers |
 | M4 | Distribution: Homebrew formula, cross-platform binaries, docs site |

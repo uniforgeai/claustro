@@ -4,8 +4,8 @@
 
 ## 2. internal/config package
 
-- [x] 2.1 Create `internal/config/config.go` — define `Config`, `ImageConfig`, `ExtraStep` structs; implement `Load(projectPath string) (*Config, error)` using Viper to read `sandbox.yaml`; return empty `Config{}` (not an error) when no `sandbox.yaml` is present
-- [x] 2.2 Add unit tests `internal/config/config_test.go` — test `Load` with a valid `sandbox.yaml`, with a missing file, and with an `image.extra` block; use table-driven tests and Testify
+- [x] 2.1 Create `internal/config/config.go` — define `Config`, `ImageConfig`, `ExtraStep` structs; implement `Load(projectPath string) (*Config, error)` using Viper to read `claustro.yaml`; return empty `Config{}` (not an error) when no `claustro.yaml` is present
+- [x] 2.2 Add unit tests `internal/config/config_test.go` — test `Load` with a valid `claustro.yaml`, with a missing file, and with an `image.extra` block; use table-driven tests and Testify
 
 ## 3. Extension image in internal/image
 
@@ -30,5 +30,5 @@
 - [x] 6.1 `go build ./...` passes with no errors
 - [x] 6.2 `go test ./...` passes (all new unit tests green)
 - [x] 6.3 `golangci-lint run` passes with no new warnings
-- [x] 6.4 Manual smoke test: `claustro up` with no `sandbox.yaml` behaves identically to before
-- [x] 6.5 Manual smoke test: `claustro up` with a `sandbox.yaml` containing `image.extra` builds `claustro-{project}:latest` and uses it for the container
+- [x] 6.4 Manual smoke test: `claustro up` with no `claustro.yaml` behaves identically to before
+- [x] 6.5 Manual smoke test: `claustro up` with a `claustro.yaml` containing `image.extra` builds `claustro-{project}:latest` and uses it for the container
