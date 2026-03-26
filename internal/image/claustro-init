@@ -1,0 +1,28 @@
+#!/bin/sh
+# claustro-init — container startup script (runs as root)
+#
+# 1. Creates the host-path symlink so Claude Code uses the same
+#    ~/.claude/projects/ entry as the host session.
+# 2. Hands off to the sandbox user.
+
+set -e
+
+HOST_PATH="${CLAUSTRO_HOST_PATH:-}"
+
+if [ -n "$HOST_PATH" ]; then
+    # Create the directory tree up to (but not including) the final component
+    parent="$(dirname "$HOST_PATH")"
+    if [ ! -d "$parent" ]; then
+        mkdir -p "$parent"
+        chown sandbox:sandbox "$parent"
+    fi
+
+    # Create the symlink if it doesn't exist
+    if [ ! -e "$HOST_PATH" ]; then
+        ln -sf /workspace "$HOST_PATH"
+        chown -h sandbox:sandbox "$HOST_PATH"
+    fi
+fi
+
+# Hand off to sandbox user, running the provided command
+exec su -s /bin/sh sandbox -c "$(printf '%s ' "$@")"
