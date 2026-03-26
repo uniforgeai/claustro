@@ -22,3 +22,6 @@ coverage.html
 
 # macOS
 .DS_Store
+
+# Git worktree metadata (worktree dirs live outside the repo)
+.claude/worktrees/
