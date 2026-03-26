@@ -21,7 +21,7 @@ func newBurnCmd() *cobra.Command {
 			return runBurn(cmd.Context(), name, all)
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-select if only one running)`)
 	cmd.Flags().BoolVar(&all, "all", false, "Stop and remove all sandbox containers for the current project")
 	return cmd
 }
@@ -31,7 +31,8 @@ func runBurn(ctx context.Context, name string, all bool) error {
 		return fmt.Errorf("--name and --all are mutually exclusive")
 	}
 
-	id, err := identity.FromCWD(name)
+	// Derive project slug from CWD (name empty is fine — just need project).
+	tmpID, err := identity.FromCWD("")
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -43,12 +44,12 @@ func runBurn(ctx context.Context, name string, all bool) error {
 	defer cli.Close() //nolint:errcheck
 
 	if all {
-		containers, err := container.ListByProject(ctx, cli, id.Project, false)
+		containers, err := container.ListByProject(ctx, cli, tmpID.Project, false)
 		if err != nil {
 			return fmt.Errorf("listing sandboxes: %w", err)
 		}
 		if len(containers) == 0 {
-			fmt.Printf("No sandboxes for project %q — nothing to burn.\n", id.Project)
+			fmt.Printf("No sandboxes for project %q — nothing to burn.\n", tmpID.Project)
 			return nil
 		}
 		for _, c := range containers {
@@ -64,6 +65,16 @@ func runBurn(ctx context.Context, name string, all bool) error {
 			fmt.Printf("Burned: %s\n", cName)
 		}
 		return nil
+	}
+
+	resolvedName, err := resolveName(ctx, cli, tmpID.Project, name)
+	if err != nil {
+		return err
+	}
+
+	id, err := identity.FromCWD(resolvedName)
+	if err != nil {
+		return fmt.Errorf("resolving identity: %w", err)
 	}
 
 	c, err := container.FindByIdentity(ctx, cli, id)

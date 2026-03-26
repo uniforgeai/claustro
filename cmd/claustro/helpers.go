@@ -16,9 +16,5 @@ func newDockerClient() (*client.Client, error) {
 }
 
 func errNotRunning(id *identity.Identity) error {
-	hint := ""
-	if id.Name != "default" {
-		hint = " --name " + id.Name
-	}
-	return fmt.Errorf("no running sandbox %q found — run: claustro up%s", id.ContainerName(), hint)
+	return fmt.Errorf("no running sandbox %q found — run: claustro up --name %s", id.ContainerName(), id.Name)
 }

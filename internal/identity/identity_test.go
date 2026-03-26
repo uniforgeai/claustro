@@ -1,11 +1,15 @@
 package identity
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// adjNounPattern matches the auto-generated adjective_noun format.
+var adjNounPattern = regexp.MustCompile(`^[a-z]+_[a-z]+$`)
 
 func Test_slugify(t *testing.T) {
 	tests := []struct {
@@ -29,34 +33,48 @@ func Test_slugify(t *testing.T) {
 }
 
 func Test_fromPath(t *testing.T) {
-	tests := []struct {
-		path        string
-		name        string
-		wantProject string
-		wantName    string
-	}{
-		{"/Users/pepusz/code/my-saas", "", "my-saas", "default"},
-		{"/Users/pepusz/code/my-saas", "backend", "my-saas", "backend"},
-		{"/home/user/My.Project", "", "my-project", "default"},
-		{"/home/user/MyApp", "api", "myapp", "api"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.path+"/"+tt.name, func(t *testing.T) {
-			id, err := fromPath(tt.path, tt.name)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantProject, id.Project)
-			assert.Equal(t, tt.wantName, id.Name)
-			assert.Equal(t, tt.path, id.HostPath)
-		})
-	}
+	t.Run("explicit name is used as-is", func(t *testing.T) {
+		id, err := fromPath("/Users/pepusz/code/my-saas", "backend")
+		require.NoError(t, err)
+		assert.Equal(t, "my-saas", id.Project)
+		assert.Equal(t, "backend", id.Name)
+	})
+
+	t.Run("explicit api name", func(t *testing.T) {
+		id, err := fromPath("/home/user/MyApp", "api")
+		require.NoError(t, err)
+		assert.Equal(t, "myapp", id.Project)
+		assert.Equal(t, "api", id.Name)
+	})
+
+	t.Run("empty name generates adjective_noun", func(t *testing.T) {
+		id, err := fromPath("/Users/pepusz/code/my-saas", "")
+		require.NoError(t, err)
+		assert.Equal(t, "my-saas", id.Project)
+		assert.Regexp(t, adjNounPattern, id.Name, "auto-generated name should match adjective_noun pattern")
+	})
+
+	t.Run("empty name from My.Project generates adjective_noun", func(t *testing.T) {
+		id, err := fromPath("/home/user/My.Project", "")
+		require.NoError(t, err)
+		assert.Equal(t, "my-project", id.Project)
+		assert.Regexp(t, adjNounPattern, id.Name, "auto-generated name should match adjective_noun pattern")
+	})
 }
 
 func TestFromCWD(t *testing.T) {
 	id, err := FromCWD("")
 	require.NoError(t, err)
-	assert.Equal(t, "default", id.Name)
+	assert.Regexp(t, adjNounPattern, id.Name, "auto-generated name should match adjective_noun pattern")
 	assert.NotEmpty(t, id.Project)
 	assert.NotEmpty(t, id.HostPath)
+}
+
+func TestFromCWD_ExplicitName(t *testing.T) {
+	id, err := FromCWD("myname")
+	require.NoError(t, err)
+	assert.Equal(t, "myname", id.Name)
+	assert.NotEmpty(t, id.Project)
 }
 
 func TestIdentity_ContainerName(t *testing.T) {

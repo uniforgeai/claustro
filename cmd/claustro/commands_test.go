@@ -36,12 +36,13 @@ func TestSetupCommands_RegistersAllCommands(t *testing.T) {
 	}
 }
 
-func TestErrNotRunning_DefaultName(t *testing.T) {
-	id := &identity.Identity{Project: "myproject", Name: "default", HostPath: "/tmp"}
+func TestErrNotRunning_AlwaysShowsName(t *testing.T) {
+	// errNotRunning always includes --name so the user can rerun `claustro up` with the same name.
+	id := &identity.Identity{Project: "myproject", Name: "calm_river", HostPath: "/tmp"}
 	err := errNotRunning(id)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "myproject")
-	assert.NotContains(t, err.Error(), "--name")
+	assert.Contains(t, err.Error(), "--name calm_river")
 }
 
 func TestErrNotRunning_CustomName(t *testing.T) {
