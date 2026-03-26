@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -56,5 +58,9 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 	}
 
 	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, extraArgs...)
-	return container.Exec(ctx, cli, c.ID, execCmd, true)
+	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
+	return container.Exec(ctx, cli, c.ID, execCmd, container.ExecOptions{
+		Interactive:      true,
+		ClipboardSockDir: sockDir,
+	})
 }

@@ -28,6 +28,12 @@ var dockerfile []byte
 //go:embed claustro-init
 var initScript []byte
 
+//go:embed xclip-shim
+var xclipShim []byte
+
+//go:embed wl-paste-shim
+var wlPasteShim []byte
+
 const ImageName = "claustro:latest"
 
 // EnsureBuilt checks whether the claustro image exists and builds it if not.
@@ -92,6 +98,8 @@ func buildContext() ([]byte, error) {
 	}{
 		{"Dockerfile", dockerfile, 0644},
 		{"claustro-init", initScript, 0755},
+		{"xclip-shim", xclipShim, 0755},
+		{"wl-paste-shim", wlPasteShim, 0755},
 	}
 
 	for _, f := range files {

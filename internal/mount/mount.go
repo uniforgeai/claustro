@@ -20,7 +20,10 @@ import (
 //   - ~/.config/gh/   → /home/sandbox/.config/gh/  (read-write, if exists and enabled)
 //   - $SSH_AUTH_SOCK  → same path inside container  (if set and agent forwarding enabled)
 //   - ~/.ssh/         → /home/sandbox/.ssh/  (read-only, if exists and explicitly enabled)
-func Assemble(hostProjectPath string, git *config.GitConfig) ([]mount.Mount, error) {
+//
+// clipboardSockDir, when non-empty, is created on the host and mounted at /run/claustro
+// inside the container so the clipboard bridge socket is accessible to shim scripts.
+func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir string) ([]mount.Mount, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("getting home directory: %w", err)
@@ -99,6 +102,18 @@ func Assemble(hostProjectPath string, git *config.GitConfig) ([]mount.Mount, err
 				ReadOnly: true,
 			})
 		}
+	}
+
+	// Clipboard bridge socket directory
+	if clipboardSockDir != "" {
+		if err := os.MkdirAll(clipboardSockDir, 0o700); err != nil {
+			return nil, fmt.Errorf("creating clipboard socket directory: %w", err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: clipboardSockDir,
+			Target: "/run/claustro",
+		})
 	}
 
 	return mounts, nil

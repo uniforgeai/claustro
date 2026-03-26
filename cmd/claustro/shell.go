@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -53,5 +55,9 @@ func runShell(ctx context.Context, name string) error {
 		return errNotRunning(id)
 	}
 
-	return container.Exec(ctx, cli, c.ID, []string{"/bin/zsh"}, true)
+	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
+	return container.Exec(ctx, cli, c.ID, []string{"/bin/zsh"}, container.ExecOptions{
+		Interactive:      true,
+		ClipboardSockDir: sockDir,
+	})
 }

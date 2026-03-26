@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/docker/docker/api/types/mount"
@@ -97,7 +98,8 @@ func runUp(ctx context.Context, name string) error {
 		}
 	}
 
-	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git)
+	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
+	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir)
 	if err != nil {
 		return fmt.Errorf("assembling mounts: %w", err)
 	}

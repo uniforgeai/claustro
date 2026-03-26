@@ -54,6 +54,13 @@ RUN npm install -g @anthropic-ai/claude-code ccstatusline \
     && mkdir -p /home/sandbox/.local/bin \
     && ln -sf "$(which claude)" /home/sandbox/.local/bin/claude
 
+# Install clipboard shims (xclip and wl-paste) that bridge to the host clipboard
+# via the claustro Unix socket mounted at /run/claustro/clipboard.sock.
+COPY xclip-shim /usr/local/bin/xclip
+COPY wl-paste-shim /usr/local/bin/wl-paste
+RUN chmod +x /usr/local/bin/xclip /usr/local/bin/wl-paste \
+    && mkdir -p /run/claustro
+
 # Create non-root sandbox user at uid 1000
 # Ubuntu 24.04 ships with uid 1000 ('ubuntu') — delete it first
 RUN userdel -r ubuntu 2>/dev/null || true \
