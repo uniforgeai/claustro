@@ -9,21 +9,26 @@ import (
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-func newBurnCmd() *cobra.Command {
+func newExecCmd() *cobra.Command {
 	var name string
 	cmd := &cobra.Command{
-		Use:   "burn",
-		Short: "Stop and remove a sandbox container",
-		Long:  "Stops and removes the sandbox container. Image and ~/.claude are preserved.",
+		Use:   "exec -- <command> [args...]",
+		Short: "Run a one-off command in a running sandbox",
+		Long:  "Runs a command inside the sandbox and streams its output. Pass the command after '--'.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBurn(cmd.Context(), name)
+			return runExec(cmd.Context(), name, args)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().SetInterspersed(false)
 	return cmd
 }
 
-func runBurn(ctx context.Context, name string) error {
+func runExec(ctx context.Context, name string, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("command required after '--'")
+	}
+
 	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -40,18 +45,8 @@ func runBurn(ctx context.Context, name string) error {
 		return fmt.Errorf("finding sandbox: %w", err)
 	}
 	if c == nil {
-		fmt.Printf("No sandbox %q found — nothing to burn.\n", id.ContainerName())
-		return nil
+		return errNotRunning(id)
 	}
 
-	fmt.Printf("Burning sandbox %s...\n", id.ContainerName())
-	if err := container.Stop(ctx, cli, c.ID); err != nil {
-		fmt.Printf("(stop: %v — continuing)\n", err)
-	}
-	if err := container.Remove(ctx, cli, c.ID); err != nil {
-		return fmt.Errorf("removing container: %w", err)
-	}
-
-	fmt.Printf("Burned: %s\n", id.ContainerName())
-	return nil
+	return container.Exec(ctx, cli, c.ID, args, false)
 }

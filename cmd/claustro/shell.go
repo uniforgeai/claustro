@@ -9,23 +9,21 @@ import (
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "Open an interactive shell in a running sandbox",
-	RunE:  runShell,
+func newShellCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "shell",
+		Short: "Open an interactive shell in a running sandbox",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runShell(cmd.Context(), name)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	return cmd
 }
 
-var shellName string
-
-func init() {
-	shellCmd.Flags().StringVar(&shellName, "name", "", "Sandbox name (default: \"default\")")
-	rootCmd.AddCommand(shellCmd)
-}
-
-func runShell(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
-	id, err := identity.FromCWD(shellName)
+func runShell(ctx context.Context, name string) error {
+	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -34,15 +32,14 @@ func runShell(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer cli.Close() //nolint:errcheck
 
 	c, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("finding sandbox: %w", err)
 	}
 	if c == nil {
-		exitIfNotRunning(shellName)
-		return nil
+		return errNotRunning(id)
 	}
 
 	return container.Exec(ctx, cli, c.ID, []string{"/bin/zsh"}, true)

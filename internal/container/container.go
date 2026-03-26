@@ -16,15 +16,27 @@ import (
 	"github.com/uniforgeai/claustro/internal/image"
 )
 
+// CreateOptions configures optional parameters for container creation.
+type CreateOptions struct {
+	// ImageName overrides the default claustro:latest image.
+	// If empty, image.ImageName is used.
+	ImageName string
+}
+
 // Create creates (but does not start) a sandbox container.
-func Create(ctx context.Context, cli *client.Client, id *identity.Identity, mounts []mount.Mount) (string, error) {
+func Create(ctx context.Context, cli *client.Client, id *identity.Identity, mounts []mount.Mount, opts CreateOptions) (string, error) {
 	// Ensure the sandbox network exists
 	if err := ensureNetwork(ctx, cli, id); err != nil {
 		return "", fmt.Errorf("ensuring network: %w", err)
 	}
 
+	imageName := opts.ImageName
+	if imageName == "" {
+		imageName = image.ImageName
+	}
+
 	cfg := &containertypes.Config{
-		Image: image.ImageName,
+		Image: imageName,
 		Labels: id.Labels(),
 		Env: []string{
 			"CLAUSTRO_HOST_PATH=" + id.HostPath,
@@ -37,7 +49,12 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 	}
 
 	hostCfg := &containertypes.HostConfig{
-		Mounts: mounts,
+		Mounts:      mounts,
+		SecurityOpt: []string{"no-new-privileges:true"},
+		Resources: containertypes.Resources{
+			NanoCPUs: 4_000_000_000,
+			Memory:   8 * 1024 * 1024 * 1024,
+		},
 	}
 
 	netCfg := &networktypes.NetworkingConfig{
@@ -163,11 +180,36 @@ func ListByProject(ctx context.Context, cli *client.Client, project string, allP
 	return containers, nil
 }
 
+// Inspect returns detailed information about a container.
+func Inspect(ctx context.Context, cli *client.Client, containerID string) (containertypes.InspectResponse, error) {
+	info, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return containertypes.InspectResponse{}, fmt.Errorf("inspecting container: %w", err)
+	}
+	return info, nil
+}
+
+// RemoveNetwork removes a Docker network by name, ignoring not-found errors.
+func RemoveNetwork(ctx context.Context, cli *client.Client, networkName string) error {
+	args := filters.NewArgs(filters.Arg("name", "^"+networkName+"$"))
+	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})
+	if err != nil {
+		return fmt.Errorf("listing networks: %w", err)
+	}
+	if len(networks) == 0 {
+		return nil
+	}
+	if err := cli.NetworkRemove(ctx, networks[0].ID); err != nil {
+		return fmt.Errorf("removing network: %w", err)
+	}
+	return nil
+}
+
 func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identity) error {
 	args := filters.NewArgs(filters.Arg("name", "^"+id.NetworkName()+"$"))
 	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})
 	if err != nil {
-		return err
+		return fmt.Errorf("listing networks: %w", err)
 	}
 	if len(networks) > 0 {
 		return nil
@@ -176,5 +218,8 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 		Driver: "bridge",
 		Labels: id.Labels(),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("creating network: %w", err)
+	}
+	return nil
 }
