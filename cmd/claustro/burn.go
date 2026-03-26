@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -11,19 +12,25 @@ import (
 
 func newBurnCmd() *cobra.Command {
 	var name string
+	var all bool
 	cmd := &cobra.Command{
 		Use:   "burn",
 		Short: "Stop and remove a sandbox container",
 		Long:  "Stops and removes the sandbox container. Image and ~/.claude are preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBurn(cmd.Context(), name)
+			return runBurn(cmd.Context(), name, all)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().BoolVar(&all, "all", false, "Stop and remove all sandbox containers for the current project")
 	return cmd
 }
 
-func runBurn(ctx context.Context, name string) error {
+func runBurn(ctx context.Context, name string, all bool) error {
+	if name != "" && all {
+		return fmt.Errorf("--name and --all are mutually exclusive")
+	}
+
 	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -34,6 +41,30 @@ func runBurn(ctx context.Context, name string) error {
 		return err
 	}
 	defer cli.Close() //nolint:errcheck
+
+	if all {
+		containers, err := container.ListByProject(ctx, cli, id.Project, false)
+		if err != nil {
+			return fmt.Errorf("listing sandboxes: %w", err)
+		}
+		if len(containers) == 0 {
+			fmt.Printf("No sandboxes for project %q — nothing to burn.\n", id.Project)
+			return nil
+		}
+		for _, c := range containers {
+			cName := strings.TrimPrefix(c.Names[0], "/")
+			fmt.Printf("Burning sandbox %s...\n", cName)
+			if err := container.Stop(ctx, cli, c.ID); err != nil {
+				fmt.Printf("(stop: %v — continuing)\n", err)
+			}
+			if err := container.Remove(ctx, cli, c.ID); err != nil {
+				fmt.Printf("error removing container %s: %v\n", cName, err)
+				continue
+			}
+			fmt.Printf("Burned: %s\n", cName)
+		}
+		return nil
+	}
 
 	c, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
