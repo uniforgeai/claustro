@@ -3,27 +3,31 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-func newBurnCmd() *cobra.Command {
+func newLogsCmd() *cobra.Command {
 	var name string
+	var follow bool
+	var tail int
 	cmd := &cobra.Command{
-		Use:   "burn",
-		Short: "Stop and remove a sandbox container",
-		Long:  "Stops and removes the sandbox container. Image and ~/.claude are preserved.",
+		Use:   "logs",
+		Short: "Stream or tail container logs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBurn(cmd.Context(), name)
+			return runLogs(cmd.Context(), name, follow, tail)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow log output")
+	cmd.Flags().IntVar(&tail, "tail", 100, "Number of lines to show from the end")
 	return cmd
 }
 
-func runBurn(ctx context.Context, name string) error {
+func runLogs(ctx context.Context, name string, follow bool, tail int) error {
 	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -40,18 +44,8 @@ func runBurn(ctx context.Context, name string) error {
 		return fmt.Errorf("finding sandbox: %w", err)
 	}
 	if c == nil {
-		fmt.Printf("No sandbox %q found — nothing to burn.\n", id.ContainerName())
-		return nil
+		return errNotRunning(id)
 	}
 
-	fmt.Printf("Burning sandbox %s...\n", id.ContainerName())
-	if err := container.Stop(ctx, cli, c.ID); err != nil {
-		fmt.Printf("(stop: %v — continuing)\n", err)
-	}
-	if err := container.Remove(ctx, cli, c.ID); err != nil {
-		return fmt.Errorf("removing container: %w", err)
-	}
-
-	fmt.Printf("Burned: %s\n", id.ContainerName())
-	return nil
+	return container.Logs(ctx, cli, c.ID, os.Stdout, os.Stderr, follow, tail)
 }

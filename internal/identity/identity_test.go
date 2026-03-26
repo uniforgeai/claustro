@@ -51,15 +51,23 @@ func Test_fromPath(t *testing.T) {
 	}
 }
 
+func TestFromCWD(t *testing.T) {
+	id, err := FromCWD("")
+	require.NoError(t, err)
+	assert.Equal(t, "default", id.Name)
+	assert.NotEmpty(t, id.Project)
+	assert.NotEmpty(t, id.HostPath)
+}
+
 func TestIdentity_ContainerName(t *testing.T) {
 	tests := []struct {
 		project string
 		name    string
 		want    string
 	}{
-		{"my-saas", "default", "claustro-my-saas-default"},
-		{"my-saas", "backend", "claustro-my-saas-backend"},
-		{"myapp", "api", "claustro-myapp-api"},
+		{"my-saas", "default", "claustro-my-saas_default"},
+		{"my-saas", "backend", "claustro-my-saas_backend"},
+		{"myapp", "api", "claustro-myapp_api"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
@@ -69,9 +77,24 @@ func TestIdentity_ContainerName(t *testing.T) {
 	}
 }
 
+func TestIdentity_ContainerName_Unambiguous(t *testing.T) {
+	// "my-saas" project + "default" name must differ from "my" project + "saas-default" name
+	id1 := &Identity{Project: "my-saas", Name: "default"}
+	id2 := &Identity{Project: "my", Name: "saas-default"}
+	assert.NotEqual(t, id1.ContainerName(), id2.ContainerName())
+}
+
 func TestIdentity_NetworkName(t *testing.T) {
 	id := &Identity{Project: "my-saas", Name: "default"}
-	assert.Equal(t, "claustro-my-saas-default-net", id.NetworkName())
+	assert.Equal(t, "claustro-my-saas_default_net", id.NetworkName())
+}
+
+func TestNetworkNameFromLabels(t *testing.T) {
+	labels := map[string]string{
+		"claustro.project": "myproject",
+		"claustro.name":    "default",
+	}
+	assert.Equal(t, "claustro-myproject_default_net", NetworkNameFromLabels(labels))
 }
 
 func TestIdentity_Labels(t *testing.T) {
