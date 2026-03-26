@@ -14,7 +14,7 @@ Three missing pieces:
 
 ### Credential forwarding (mount.go + container.Create)
 
-Mount the following from the host into every sandbox by default (with per-key opt-outs via `sandbox.yaml`):
+Mount the following from the host into every sandbox by default (with per-key opt-outs via `claustro.yaml`):
 
 | Host path | Container path | Mode | Sensitivity |
 |-----------|---------------|------|-------------|
@@ -22,16 +22,16 @@ Mount the following from the host into every sandbox by default (with per-key op
 | `~/.config/gh/` | `/home/sandbox/.config/gh/` | read-write | medium — GitHub PAT |
 | SSH socket (`$SSH_AUTH_SOCK`) | forwarded via bind mount | — | low — no key material in container |
 
-SSH keys themselves (`~/.ssh/`) are **not mounted by default** — SSH agent forwarding is preferred because it keeps private key material on the host. If `SSH_AUTH_SOCK` is not available and the user opts in via `sandbox.yaml`, `~/.ssh/` can be mounted read-only.
+SSH keys themselves (`~/.ssh/`) are **not mounted by default** — SSH agent forwarding is preferred because it keeps private key material on the host. If `SSH_AUTH_SOCK` is not available and the user opts in via `claustro.yaml`, `~/.ssh/` can be mounted read-only.
 
 ### GitHub CLI in the base image
 
 Add `gh` (GitHub CLI) to the base Dockerfile so `gh pr create`, `gh issue list`, etc. are available without any user setup.
 
-### `sandbox.yaml` controls
+### `claustro.yaml` controls
 
 ```yaml
-# sandbox.yaml
+# claustro.yaml
 git:
   forward_agent: true        # forward SSH_AUTH_SOCK if present (default: true)
   mount_gitconfig: true      # mount ~/.gitconfig read-only (default: true)
@@ -48,17 +48,17 @@ git:
 
 ### Modified Capabilities
 
-- `source-mounting`: `mount.Assemble()` extended to conditionally include git-related mounts based on host path existence and `sandbox.yaml` config.
+- `source-mounting`: `mount.Assemble()` extended to conditionally include git-related mounts based on host path existence and `claustro.yaml` config.
 - `base-image`: Dockerfile updated to install `gh` CLI.
 
 ## Milestone
 
-M2 — depends on `sandbox.yaml` config infrastructure (M2 scope).
+M2 — depends on `claustro.yaml` config infrastructure (M2 scope).
 
 ## Impact
 
 - `internal/mount/mount.go`: Add SSH agent socket forwarding + gitconfig + gh config mounts.
-- `internal/config/config.go`: Add `GitConfig` struct to `Config` for the `git:` block in `sandbox.yaml`.
+- `internal/config/config.go`: Add `GitConfig` struct to `Config` for the `git:` block in `claustro.yaml`.
 - `internal/image/Dockerfile`: Add `gh` CLI installation.
 - `internal/container/container.go`: Forward `SSH_AUTH_SOCK` as an env var + socket bind mount when present.
 - No new external Go dependencies required.

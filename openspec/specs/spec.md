@@ -76,7 +76,7 @@ The system SHALL provide a single Go binary (`claude-sandbox` or a shorter name 
 - **GIVEN** the user runs the CLI from a project directory
 - **WHEN** any command is invoked without explicit path arguments
 - **THEN** the current working directory is treated as the project root
-- **AND** the project is identified by its directory basename (or `sandbox.yaml` override)
+- **AND** the project is identified by its directory basename (or `claustro.yaml` override)
 
 #### Scenario: Help and discoverability
 
@@ -339,7 +339,7 @@ The system SHALL provide a container image with runtimes for multiple programmin
 
 #### Scenario: Custom image
 
-- **WHEN** the user specifies `image:` in `sandbox.yaml` or uses `--image` flag
+- **WHEN** the user specifies `image:` in `claustro.yaml` or uses `--image` flag
 - **THEN** that image is used instead of the default
 - **AND** it must have Claude Code pre-installed or the user accepts responsibility
 
@@ -364,7 +364,7 @@ The system SHALL support both stdio-based and SSE-based MCP servers.
 
 #### Scenario: SSE MCP servers as compose siblings
 
-- **WHEN** the user configures SSE MCP servers in `sandbox.yaml`
+- **WHEN** the user configures SSE MCP servers in `claustro.yaml`
 - **THEN** the CLI starts the MCP server containers alongside the sandbox
 - **AND** they share a Docker network so the sandbox can reach them
 - **AND** the MCP endpoints are injected into Claude's config
@@ -382,14 +382,14 @@ The system SHALL optionally restrict outbound network access from the sandbox.
 
 #### Scenario: Firewall enabled
 
-- **WHEN** the user enables the firewall via `--firewall` flag or `sandbox.yaml`
+- **WHEN** the user enables the firewall via `--firewall` flag or `claustro.yaml`
 - **THEN** outbound traffic is blocked by default (iptables DROP)
 - **AND** the following domains are whitelisted: Anthropic API, npm registry, PyPI, GitHub, Ubuntu repos
 - **AND** Docker internal networks (172.16.0.0/12, 192.168.0.0/16, 10.0.0.0/8) are allowed for compose-sibling services
 
 #### Scenario: Custom domain whitelist
 
-- **WHEN** the user specifies additional allowed domains in `sandbox.yaml`
+- **WHEN** the user specifies additional allowed domains in `claustro.yaml`
 - **THEN** those domains are added to the firewall whitelist
 
 ---
@@ -419,17 +419,17 @@ The system SHALL enforce security best practices by default.
 
 ### Requirement: Project Configuration
 
-The system SHALL support a `sandbox.yaml` configuration file in the project root.
+The system SHALL support a `claustro.yaml` configuration file in the project root.
 
 #### Scenario: Config discovery
 
-- **WHEN** the CLI is invoked from a directory containing `sandbox.yaml`
+- **WHEN** the CLI is invoked from a directory containing `claustro.yaml`
 - **THEN** the configuration is loaded and applied
 
 #### Scenario: Config structure
 
 ```yaml
-# sandbox.yaml
+# claustro.yaml
 project: my-saas                    # override project slug (default: dirname)
 image: claude-sandbox:latest        # custom image
 
@@ -474,7 +474,7 @@ mcp:
 
 #### Scenario: CLI flags override config
 
-- **WHEN** the user provides CLI flags that conflict with `sandbox.yaml`
+- **WHEN** the user provides CLI flags that conflict with `claustro.yaml`
 - **THEN** CLI flags take precedence
 
 ---
@@ -491,13 +491,13 @@ The system SHALL support passing environment variables into the sandbox.
 
 #### Scenario: .env file
 
-- **GIVEN** a `.env` file exists alongside `sandbox.yaml`
+- **GIVEN** a `.env` file exists alongside `claustro.yaml`
 - **WHEN** a sandbox starts
 - **THEN** variables from `.env` are loaded into the container environment
 
 #### Scenario: Per-sandbox env
 
-- **GIVEN** `sandbox.yaml` defines env vars for a named sandbox
+- **GIVEN** `claustro.yaml` defines env vars for a named sandbox
 - **WHEN** that sandbox starts
 - **THEN** the per-sandbox env vars are applied
 
@@ -573,7 +573,7 @@ The system SHALL be implemented in Go.
 
 1. **Name** — `claude-sandbox` is descriptive but long. `csb`? `cbox`? `sandclaude`? Something entirely different?
 2. **Dockerfile authoring** — should the CLI generate the Dockerfile on the fly, or ship a static one the user can extend?
-3. **Plugin/extension model** — should `sandbox.yaml` support custom Dockerfile snippets or just image overrides?
+3. **Plugin/extension model** — should `claustro.yaml` support custom Dockerfile snippets or just image overrides?
 4. **Connect to project network** — optional flag to attach the sandbox to the project's compose network so Claude can talk to the project's dev services?
 5. **GPU passthrough** — should we support `--gpu` for local model inference via Docker Model Runner?
 6. **Update mechanism** — how does the user update Claude Code inside the image? Rebuild only, or an `upgrade` command?
@@ -590,7 +590,7 @@ The system SHALL be implemented in Go.
 
 ### M2: Multi-Sandbox + Config
 - Multiple concurrent sandboxes per project
-- `sandbox.yaml` config file
+- `claustro.yaml` config file
 - `--workdir`, `--mount`, `--name` flags
 - `.env` file support
 
@@ -604,4 +604,4 @@ The system SHALL be implemented in Go.
 - Homebrew formula
 - Cross-platform binaries
 - Documentation site
-- `sandbox.yaml` validation and schema
+- `claustro.yaml` validation and schema

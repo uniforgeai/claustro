@@ -1,4 +1,4 @@
-// Package config loads per-project claustro configuration from sandbox.yaml.
+// Package config loads per-project claustro configuration from claustro.yaml.
 package config
 
 import (
@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds the full claustro project configuration from sandbox.yaml.
+// Config holds the full claustro project configuration from claustro.yaml.
 type Config struct {
 	Image ImageConfig `yaml:"image"`
 	Git   GitConfig   `yaml:"git"`
@@ -17,7 +17,7 @@ type Config struct {
 
 // GitConfig controls which host git/GitHub credentials are forwarded into the sandbox.
 // All forwarding is enabled by default (opt-out model). Set a field to false in
-// sandbox.yaml to disable it.
+// claustro.yaml to disable it.
 type GitConfig struct {
 	// ForwardAgent forwards the host SSH agent socket (SSH_AUTH_SOCK) when present.
 	// Default: true.
@@ -56,20 +56,20 @@ type ExtraStep struct {
 	Run string `yaml:"run"`
 }
 
-// Load reads sandbox.yaml from projectPath and returns the parsed Config.
-// If sandbox.yaml is not present, an empty Config is returned with no error.
+// Load reads claustro.yaml from projectPath and returns the parsed Config.
+// If claustro.yaml is not present, an empty Config is returned with no error.
 func Load(projectPath string) (*Config, error) {
-	path := filepath.Join(projectPath, "sandbox.yaml")
+	path := filepath.Join(projectPath, "claustro.yaml")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return &Config{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading sandbox.yaml: %w", err)
+		return nil, fmt.Errorf("reading claustro.yaml: %w", err)
 	}
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing sandbox.yaml: %w", err)
+		return nil, fmt.Errorf("parsing claustro.yaml: %w", err)
 	}
 	return &cfg, nil
 }
