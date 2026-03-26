@@ -56,15 +56,21 @@ func slugify(s string) string {
 }
 
 // ContainerName returns the Docker container name for this sandbox.
-// Format: claustro-{project}-{name}
+// Format: claustro-{project}_{name}
+// The underscore separator ensures unambiguous parsing since project slugs never contain underscores.
 func (id *Identity) ContainerName() string {
-	return fmt.Sprintf("claustro-%s-%s", id.Project, id.Name)
+	return fmt.Sprintf("claustro-%s_%s", id.Project, id.Name)
 }
 
 // NetworkName returns the Docker network name for this sandbox.
-// Format: claustro-{project}-{name}-net
+// Format: claustro-{project}_{name}_net
 func (id *Identity) NetworkName() string {
-	return fmt.Sprintf("claustro-%s-%s-net", id.Project, id.Name)
+	return fmt.Sprintf("claustro-%s_%s_net", id.Project, id.Name)
+}
+
+// NetworkNameFromLabels derives the network name for a container identified by its labels.
+func NetworkNameFromLabels(labels map[string]string) string {
+	return fmt.Sprintf("claustro-%s_%s_net", labels["claustro.project"], labels["claustro.name"])
 }
 
 // Labels returns the Docker labels to apply to all resources for this sandbox.
