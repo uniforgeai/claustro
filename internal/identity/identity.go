@@ -73,6 +73,12 @@ func NetworkNameFromLabels(labels map[string]string) string {
 	return fmt.Sprintf("claustro-%s_%s_net", labels["claustro.project"], labels["claustro.name"])
 }
 
+// VolumeName returns the Docker volume name for the given purpose.
+// Format: claustro-{project}-{name}-{purpose}
+func (id *Identity) VolumeName(purpose string) string {
+	return fmt.Sprintf("claustro-%s-%s-%s", id.Project, id.Name, purpose)
+}
+
 // Labels returns the Docker labels to apply to all resources for this sandbox.
 func (id *Identity) Labels() map[string]string {
 	return map[string]string{

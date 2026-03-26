@@ -21,9 +21,9 @@ The system SHALL mount `~/.gitconfig` from the host into every sandbox so that g
 - **THEN** no mount attempt is made (no error)
 - **AND** git uses its built-in defaults (or the user can set identity inside the container)
 
-#### Scenario: Opt-out via sandbox.yaml
+#### Scenario: Opt-out via claustro.yaml
 
-- **WHEN** `sandbox.yaml` contains `git.mount_gitconfig: false`
+- **WHEN** `claustro.yaml` contains `git.mount_gitconfig: false`
 - **THEN** `~/.gitconfig` is not mounted
 - **AND** the container starts without error
 
@@ -50,14 +50,14 @@ The system SHALL forward the host SSH agent socket into the sandbox so that `git
 - **AND** the sandbox starts normally
 - **AND** SSH-based git operations will fail unless the user opts in to `mount_ssh_dir`
 
-#### Scenario: Opt-out via sandbox.yaml
+#### Scenario: Opt-out via claustro.yaml
 
-- **WHEN** `sandbox.yaml` contains `git.forward_agent: false`
+- **WHEN** `claustro.yaml` contains `git.forward_agent: false`
 - **THEN** `SSH_AUTH_SOCK` is not forwarded even if it is set on the host
 
 #### Scenario: SSH directory fallback (explicit opt-in only)
 
-- **WHEN** `sandbox.yaml` contains `git.mount_ssh_dir: true`
+- **WHEN** `claustro.yaml` contains `git.mount_ssh_dir: true`
 - **THEN** `~/.ssh/` is bind-mounted read-only at `/home/sandbox/.ssh/`
 - **AND** a warning is printed at `up` time: "Mounting ~/.ssh read-only into the container. Private key material will be accessible inside the sandbox."
 - **AND** this option is mutually exclusive with `forward_agent: true` (agent forwarding takes precedence)
@@ -97,9 +97,9 @@ The system SHALL mount `~/.config/gh/` from the host into every sandbox so that 
 - **THEN** the refreshed token is written back to the host `~/.config/gh/`
 - **AND** the host `gh` CLI remains authenticated after the sandbox is burned
 
-#### Scenario: Opt-out via sandbox.yaml
+#### Scenario: Opt-out via claustro.yaml
 
-- **WHEN** `sandbox.yaml` contains `git.mount_gh_config: false`
+- **WHEN** `claustro.yaml` contains `git.mount_gh_config: false`
 - **THEN** `~/.config/gh/` is not mounted
 
 ---
@@ -122,11 +122,11 @@ The system SHALL install the `gh` CLI in the base Docker image.
 
 ---
 
-## Requirement: sandbox.yaml git configuration block
+## Requirement: claustro.yaml git configuration block
 
-The system SHALL support a `git:` block in `sandbox.yaml` to control all git credential forwarding behaviour.
+The system SHALL support a `git:` block in `claustro.yaml` to control all git credential forwarding behaviour.
 
-#### Scenario: All defaults (no git block in sandbox.yaml)
+#### Scenario: All defaults (no git block in claustro.yaml)
 
 ```yaml
 # Effective defaults when no git: block is present
@@ -139,7 +139,7 @@ git:
 
 #### Scenario: Fully disabled
 
-- **WHEN** `sandbox.yaml` contains:
+- **WHEN** `claustro.yaml` contains:
   ```yaml
   git:
     forward_agent: false
@@ -151,7 +151,7 @@ git:
 
 #### Scenario: SSH dir fallback
 
-- **WHEN** `sandbox.yaml` contains `git.mount_ssh_dir: true`
+- **WHEN** `claustro.yaml` contains `git.mount_ssh_dir: true`
 - **THEN** a warning is printed and `~/.ssh/` is mounted read-only
 - **AND** `forward_agent` is ignored for this sandbox (ssh dir takes precedence if agent not available)
 

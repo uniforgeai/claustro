@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -82,6 +83,23 @@ func TestLogsCmd_Defaults(t *testing.T) {
 			assert.Equal(t, tt.defValue, f.DefValue)
 		})
 	}
+}
+
+func TestBurnCmd_Defaults(t *testing.T) {
+	cmd := newBurnCmd()
+	fName := cmd.Flags().Lookup("name")
+	assert.NotNil(t, fName)
+	assert.Equal(t, "", fName.DefValue)
+
+	fAll := cmd.Flags().Lookup("all")
+	assert.NotNil(t, fAll)
+	assert.Equal(t, "false", fAll.DefValue)
+}
+
+func TestRunBurn_MutualExclusion(t *testing.T) {
+	err := runBurn(context.Background(), "sandbox1", true)
+	require.Error(t, err)
+	assert.Equal(t, "--name and --all are mutually exclusive", err.Error())
 }
 
 func TestNukeCmd_Defaults(t *testing.T) {
