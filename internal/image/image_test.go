@@ -80,3 +80,91 @@ func TestStreamBuildOutput_SkipsMalformedJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "valid line")
 }
+
+func TestExtImageName(t *testing.T) {
+	tests := []struct {
+		project string
+		want    string
+	}{
+		{"myapp", "claustro-myapp:latest"},
+		{"my-saas", "claustro-my-saas:latest"},
+		{"proj123", "claustro-proj123:latest"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.project, func(t *testing.T) {
+			assert.Equal(t, tt.want, ExtImageName(tt.project))
+		})
+	}
+}
+
+func TestExtHash_Determinism(t *testing.T) {
+	steps := []string{"apt-get install -y ffmpeg", "pip install black"}
+	h1 := extHash(steps)
+	h2 := extHash(steps)
+	assert.Equal(t, h1, h2)
+	assert.NotEmpty(t, h1)
+}
+
+func TestExtHash_OrderSensitive(t *testing.T) {
+	h1 := extHash([]string{"step-a", "step-b"})
+	h2 := extHash([]string{"step-b", "step-a"})
+	assert.NotEqual(t, h1, h2)
+}
+
+func TestExtHash_DifferentSteps(t *testing.T) {
+	h1 := extHash([]string{"apt-get install -y ffmpeg"})
+	h2 := extHash([]string{"apt-get install -y curl"})
+	assert.NotEqual(t, h1, h2)
+}
+
+func TestExtBuildContext_ContainsDockerfile(t *testing.T) {
+	steps := []string{"apt-get install -y ffmpeg", "pip install black"}
+	ctx, err := extBuildContext(steps)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ctx)
+
+	// Extract and verify Dockerfile content
+	tr := tar.NewReader(bytes.NewReader(ctx))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		if hdr.Name == "Dockerfile" {
+			content, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			df := string(content)
+			assert.Contains(t, df, "FROM claustro:latest")
+			assert.Contains(t, df, "RUN apt-get install -y ffmpeg")
+			assert.Contains(t, df, "RUN pip install black")
+			return
+		}
+	}
+	t.Fatal("Dockerfile not found in ext build context")
+}
+
+func TestExtBuildContext_StepOrder(t *testing.T) {
+	steps := []string{"step-first", "step-second"}
+	ctx, err := extBuildContext(steps)
+	require.NoError(t, err)
+
+	tr := tar.NewReader(bytes.NewReader(ctx))
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		if hdr.Name == "Dockerfile" {
+			content, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			df := string(content)
+			firstIdx := strings.Index(df, "step-first")
+			secondIdx := strings.Index(df, "step-second")
+			assert.Less(t, firstIdx, secondIdx, "step-first should appear before step-second")
+			return
+		}
+	}
+	t.Fatal("Dockerfile not found")
+}

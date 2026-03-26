@@ -6,10 +6,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	_ "embed"
 
@@ -103,6 +106,109 @@ func buildContext() ([]byte, error) {
 		if _, err := tw.Write(f.data); err != nil {
 			return nil, err
 		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// ExtImageName returns the Docker image tag for a project's extension image.
+// Format: claustro-{project}:latest
+func ExtImageName(project string) string {
+	return fmt.Sprintf("claustro-%s:latest", project)
+}
+
+// extHash returns a SHA-256 hex digest of the ordered list of RUN steps.
+// Used as a change-detection label on extension images.
+func extHash(steps []string) string {
+	h := sha256.New()
+	for _, s := range steps {
+		h.Write([]byte(s))
+		h.Write([]byte("\n"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// EnsureExtended builds a project-specific extension image if it does not exist
+// or if the image's ext-hash label no longer matches the given steps.
+// The extension image is tagged claustro-{project}:latest and layers over claustro:latest.
+func EnsureExtended(ctx context.Context, cli *client.Client, project string, steps []string, w io.Writer) error {
+	upToDate, err := extImageUpToDate(ctx, cli, project, steps)
+	if err != nil {
+		return fmt.Errorf("checking extension image: %w", err)
+	}
+	if upToDate {
+		return nil
+	}
+	slog.Info("building extension image", "image", ExtImageName(project))
+	return buildExtended(ctx, cli, project, steps, w)
+}
+
+// BuildExtended forces a rebuild of the project extension image regardless of its current state.
+func BuildExtended(ctx context.Context, cli *client.Client, project string, steps []string, w io.Writer) error {
+	slog.Info("rebuilding extension image", "image", ExtImageName(project))
+	return buildExtended(ctx, cli, project, steps, w)
+}
+
+func extImageUpToDate(ctx context.Context, cli *client.Client, project string, steps []string) (bool, error) {
+	args := filters.NewArgs(filters.Arg("reference", ExtImageName(project)))
+	images, err := cli.ImageList(ctx, imagetypes.ListOptions{Filters: args})
+	if err != nil {
+		return false, fmt.Errorf("listing images: %w", err)
+	}
+	if len(images) == 0 {
+		return false, nil
+	}
+	return images[0].Labels["claustro.ext-hash"] == extHash(steps), nil
+}
+
+func buildExtended(ctx context.Context, cli *client.Client, project string, steps []string, w io.Writer) error {
+	buildCtx, err := extBuildContext(steps)
+	if err != nil {
+		return fmt.Errorf("creating build context: %w", err)
+	}
+
+	resp, err := cli.ImageBuild(ctx, bytes.NewReader(buildCtx), build.ImageBuildOptions{
+		Tags:       []string{ExtImageName(project)},
+		Dockerfile: "Dockerfile",
+		Remove:     true,
+		Labels:     map[string]string{"claustro.ext-hash": extHash(steps)},
+	})
+	if err != nil {
+		return fmt.Errorf("starting extension image build: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return streamBuildOutput(resp.Body, w)
+}
+
+// extBuildContext creates an in-memory tar archive containing a generated Dockerfile
+// that extends claustro:latest with the given RUN steps.
+func extBuildContext(steps []string) ([]byte, error) {
+	var sb strings.Builder
+	sb.WriteString("FROM ")
+	sb.WriteString(ImageName)
+	sb.WriteString("\n")
+	for _, step := range steps {
+		sb.WriteString("RUN ")
+		sb.WriteString(step)
+		sb.WriteString("\n")
+	}
+
+	content := []byte(sb.String())
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	hdr := &tar.Header{
+		Name: "Dockerfile",
+		Mode: 0644,
+		Size: int64(len(content)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return nil, err
+	}
+	if _, err := tw.Write(content); err != nil {
+		return nil, err
 	}
 	if err := tw.Close(); err != nil {
 		return nil, err
