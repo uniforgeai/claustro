@@ -25,11 +25,13 @@ func newUpCmd() *cobra.Command {
 			return runUp(cmd.Context(), name)
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-generated)`)
 	return cmd
 }
 
 func runUp(ctx context.Context, name string) error {
+	nameWasEmpty := name == ""
+
 	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -48,6 +50,32 @@ func runUp(ctx context.Context, name string) error {
 	if existing != nil && strings.Contains(existing.Status, "Up") {
 		fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
 		return nil
+	}
+
+	// If the name was auto-generated and a container with that name already exists,
+	// retry with a new random name (up to 5 attempts).
+	if nameWasEmpty && existing != nil {
+		const maxRetries = 5
+		var found bool
+		for i := 0; i < maxRetries; i++ {
+			newName := identity.RandomName()
+			candidate, cerr := identity.FromCWD(newName)
+			if cerr != nil {
+				return fmt.Errorf("resolving identity: %w", cerr)
+			}
+			collision, cerr := container.FindByIdentity(ctx, cli, candidate)
+			if cerr != nil {
+				return fmt.Errorf("finding sandbox: %w", cerr)
+			}
+			if collision == nil {
+				id = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxRetries)
+		}
 	}
 
 	cfg, err := config.Load(id.HostPath)
@@ -83,8 +111,14 @@ func runUp(ctx context.Context, name string) error {
 	}
 
 	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
-	fmt.Printf("  Run: claustro shell  —  open a shell\n")
-	fmt.Printf("  Run: claustro claude —  start Claude Code\n")
+	if nameWasEmpty {
+		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
+		fmt.Printf("  Run: claustro shell --name %s\n", id.Name)
+		fmt.Printf("  Run: claustro claude --name %s\n", id.Name)
+	} else {
+		fmt.Printf("  Run: claustro shell  —  open a shell\n")
+		fmt.Printf("  Run: claustro claude —  start Claude Code\n")
+	}
 	return nil
 }
 

@@ -15,14 +15,14 @@ var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
 type Identity struct {
 	// Project is the sanitized project slug derived from the CWD directory name.
 	Project string
-	// Name is the sandbox name (default: "default").
+	// Name is the sandbox name (default: auto-generated adjective_noun).
 	Name string
 	// HostPath is the absolute host project directory path.
 	HostPath string
 }
 
 // FromCWD derives an Identity from the current working directory and an optional name.
-// If name is empty, "default" is used.
+// If name is empty, a random adjective_noun name is generated.
 func FromCWD(name string) (*Identity, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -38,7 +38,7 @@ func fromPath(path, name string) (*Identity, error) {
 		return nil, fmt.Errorf("cannot derive project slug from path %q", path)
 	}
 	if name == "" {
-		name = "default"
+		name = RandomName()
 	}
 	return &Identity{
 		Project:  slug,
