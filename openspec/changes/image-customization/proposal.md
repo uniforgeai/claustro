@@ -14,7 +14,7 @@ The claustro base image (`claustro:latest`) is a fixed, opinionated polyglot env
 
 - **Add `ccstatusline`** to the base Dockerfile's global npm installs so it is available in every sandbox without manual setup.
 
-- **`sandbox.yaml` image extensions** (`image.extra`): A new `image.extra` section in `sandbox.yaml` lets projects declare additional Dockerfile `RUN` steps that are appended when building a project-specific image layer. This is the escape hatch for "my project needs `ffmpeg`" or "add this pip package."
+- **`claustro.yaml` image extensions** (`image.extra`): A new `image.extra` section in `claustro.yaml` lets projects declare additional Dockerfile `RUN` steps that are appended when building a project-specific image layer. This is the escape hatch for "my project needs `ffmpeg`" or "add this pip package."
 
 ### Future (spec only — revisit before implementing)
 
@@ -24,7 +24,7 @@ The claustro base image (`claustro:latest`) is a fixed, opinionated polyglot env
 
 ### New Capabilities
 
-- `image-extensions`: Per-project `sandbox.yaml` `image.extra` blocks append custom Dockerfile RUN steps to a project-local image layer, enabling per-project image customization without modifying the shared base.
+- `image-extensions`: Per-project `claustro.yaml` `image.extra` blocks append custom Dockerfile RUN steps to a project-local image layer, enabling per-project image customization without modifying the shared base.
 
 ### Modified Capabilities
 
@@ -33,7 +33,7 @@ The claustro base image (`claustro:latest`) is a fixed, opinionated polyglot env
 ## Impact
 
 - `internal/image/Dockerfile`: Add `ccstatusline` to npm install line.
-- `internal/config/`: New `sandbox.yaml` schema fields for `image.extra`.
+- `internal/config/`: New `claustro.yaml` schema fields for `image.extra`.
 - `internal/image/`: New `BuildExtended` function that layers project-specific extensions over the base image.
 - `cmd/claustro/up.go`: Use `BuildExtended` when `image.extra` is present in config.
 - No new external Go dependencies required.
