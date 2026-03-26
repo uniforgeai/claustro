@@ -71,6 +71,11 @@ func TestContainerLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, all)
 
+	// Inspect — should return container details
+	info, err := Inspect(ctx, cli, containerID)
+	require.NoError(t, err)
+	assert.Equal(t, id.Labels()["claustro.project"], info.Config.Labels["claustro.project"])
+
 	// Stop + Remove
 	require.NoError(t, Stop(ctx, cli, containerID))
 	require.NoError(t, Remove(ctx, cli, containerID))
@@ -79,4 +84,33 @@ func TestContainerLifecycle(t *testing.T) {
 	gone, err := FindByIdentity(ctx, cli, id)
 	require.NoError(t, err)
 	assert.Nil(t, gone)
+}
+
+func TestRemoveNetwork(t *testing.T) {
+	ctx := context.Background()
+	cli := testClient(t)
+
+	id, err := identity.FromCWD("net-test")
+	require.NoError(t, err)
+
+	// Ensure no leftover network
+	_ = cli.NetworkRemove(ctx, id.NetworkName())
+
+	// RemoveNetwork on non-existent network should be a no-op
+	require.NoError(t, RemoveNetwork(ctx, cli, id.NetworkName()))
+
+	// Create network, then remove it
+	_, err = cli.NetworkCreate(ctx, id.NetworkName(), networktypes.CreateOptions{
+		Driver: "bridge",
+		Labels: id.Labels(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, RemoveNetwork(ctx, cli, id.NetworkName()))
+
+	// Verify it's gone
+	args := filters.NewArgs(filters.Arg("name", "^"+id.NetworkName()+"$"))
+	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})
+	require.NoError(t, err)
+	assert.Empty(t, networks)
 }

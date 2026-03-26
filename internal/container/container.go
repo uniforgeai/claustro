@@ -163,6 +163,31 @@ func ListByProject(ctx context.Context, cli *client.Client, project string, allP
 	return containers, nil
 }
 
+// Inspect returns detailed information about a container.
+func Inspect(ctx context.Context, cli *client.Client, containerID string) (containertypes.InspectResponse, error) {
+	info, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return containertypes.InspectResponse{}, fmt.Errorf("inspecting container: %w", err)
+	}
+	return info, nil
+}
+
+// RemoveNetwork removes a Docker network by name, ignoring not-found errors.
+func RemoveNetwork(ctx context.Context, cli *client.Client, networkName string) error {
+	args := filters.NewArgs(filters.Arg("name", "^"+networkName+"$"))
+	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})
+	if err != nil {
+		return fmt.Errorf("listing networks: %w", err)
+	}
+	if len(networks) == 0 {
+		return nil
+	}
+	if err := cli.NetworkRemove(ctx, networks[0].ID); err != nil {
+		return fmt.Errorf("removing network: %w", err)
+	}
+	return nil
+}
+
 func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identity) error {
 	args := filters.NewArgs(filters.Arg("name", "^"+id.NetworkName()+"$"))
 	networks, err := cli.NetworkList(ctx, networktypes.ListOptions{Filters: args})

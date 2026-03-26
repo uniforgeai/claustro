@@ -40,6 +40,12 @@ func EnsureBuilt(ctx context.Context, cli *client.Client) error {
 	return buildImage(ctx, cli)
 }
 
+// Build forces a full rebuild of the claustro image regardless of whether it exists.
+func Build(ctx context.Context, cli *client.Client) error {
+	fmt.Printf("Rebuilding image %s...\n", ImageName)
+	return buildImage(ctx, cli)
+}
+
 func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
 	args := filters.NewArgs(filters.Arg("reference", ImageName))
 	images, err := cli.ImageList(ctx, imagetypes.ListOptions{Filters: args})
