@@ -50,7 +50,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code ccstatusline
+RUN npm install -g @anthropic-ai/claude-code ccstatusline \
+    && mkdir -p /home/sandbox/.local/bin \
+    && ln -sf "$(which claude)" /home/sandbox/.local/bin/claude
 
 # Create non-root sandbox user at uid 1000
 # Ubuntu 24.04 ships with uid 1000 ('ubuntu') — delete it first
