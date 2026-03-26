@@ -19,13 +19,14 @@ func newClaudeCmd() *cobra.Command {
 			return runClaude(cmd.Context(), name, args)
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: "default")`)
+	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-select if only one running)`)
 	cmd.Flags().SetInterspersed(false)
 	return cmd
 }
 
 func runClaude(ctx context.Context, name string, extraArgs []string) error {
-	id, err := identity.FromCWD(name)
+	// Derive project slug from CWD for auto-select.
+	tmpID, err := identity.FromCWD("")
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -35,6 +36,16 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 		return err
 	}
 	defer cli.Close() //nolint:errcheck
+
+	resolvedName, err := resolveName(ctx, cli, tmpID.Project, name)
+	if err != nil {
+		return err
+	}
+
+	id, err := identity.FromCWD(resolvedName)
+	if err != nil {
+		return fmt.Errorf("resolving identity: %w", err)
+	}
 
 	c, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
