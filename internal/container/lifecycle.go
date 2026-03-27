@@ -22,9 +22,9 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 
 	if len(containers) == 0 {
 		if allProjects {
-			fmt.Fprintln(w, "No claustro sandboxes found.")
+			fmt.Fprintln(w, "No claustro sandboxes found.") //nolint:errcheck
 		} else {
-			fmt.Fprintf(w, "No sandboxes for project %q — nothing to nuke.\n", project)
+			fmt.Fprintf(w, "No sandboxes for project %q — nothing to nuke.\n", project) //nolint:errcheck
 		}
 		return nil
 	}
@@ -35,27 +35,27 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 		sandboxName := c.Labels["claustro.name"]
 		project := c.Labels["claustro.project"]
 
-		fmt.Fprintf(w, "Nuking %s...\n", name)
+		fmt.Fprintf(w, "Nuking %s...\n", name) //nolint:errcheck
 
 		if err := Stop(ctx, cli, c.ID); err != nil {
-			fmt.Fprintf(w, "  (stop: %v — continuing)\n", err)
+			fmt.Fprintf(w, "  (stop: %v — continuing)\n", err) //nolint:errcheck
 		}
 		if err := Remove(ctx, cli, c.ID); err != nil {
-			fmt.Fprintf(w, "  error removing container: %v\n", err)
+			fmt.Fprintf(w, "  error removing container: %v\n", err) //nolint:errcheck
 			continue
 		}
 		if err := RemoveNetwork(ctx, cli, networkName); err != nil {
-			fmt.Fprintf(w, "  error removing network: %v\n", err)
+			fmt.Fprintf(w, "  error removing network: %v\n", err) //nolint:errcheck
 		}
 		// Remove cache volumes for this sandbox.
 		id := &identity.Identity{Project: project, Name: sandboxName}
 		for _, purpose := range []string{"npm", "pip"} {
 			volName := id.VolumeName(purpose)
 			if err := RemoveVolume(ctx, cli, volName); err != nil {
-				fmt.Fprintf(w, "  error removing volume %q: %v\n", volName, err)
+				fmt.Fprintf(w, "  error removing volume %q: %v\n", volName, err) //nolint:errcheck
 			}
 		}
-		fmt.Fprintf(w, "  nuked: %s\n", name)
+		fmt.Fprintf(w, "  nuked: %s\n", name) //nolint:errcheck
 	}
 
 	return nil
@@ -71,9 +71,9 @@ func RebuildRestart(ctx context.Context, cli *client.Client, project string, w i
 
 	for _, c := range containers {
 		name := strings.TrimPrefix(c.Names[0], "/")
-		fmt.Fprintf(w, "Stopping %s...\n", name)
+		fmt.Fprintf(w, "Stopping %s...\n", name) //nolint:errcheck
 		if err := Stop(ctx, cli, c.ID); err != nil {
-			fmt.Fprintf(w, "  (stop: %v — continuing)\n", err)
+			fmt.Fprintf(w, "  (stop: %v — continuing)\n", err) //nolint:errcheck
 		}
 	}
 
@@ -83,9 +83,9 @@ func RebuildRestart(ctx context.Context, cli *client.Client, project string, w i
 
 	for _, c := range containers {
 		name := strings.TrimPrefix(c.Names[0], "/")
-		fmt.Fprintf(w, "Restarting %s...\n", name)
+		fmt.Fprintf(w, "Restarting %s...\n", name) //nolint:errcheck
 		if err := Start(ctx, cli, c.ID); err != nil {
-			fmt.Fprintf(w, "  error restarting %s: %v\n", name, err)
+			fmt.Fprintf(w, "  error restarting %s: %v\n", name, err) //nolint:errcheck
 		}
 	}
 	return nil

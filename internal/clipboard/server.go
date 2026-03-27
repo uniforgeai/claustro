@@ -54,13 +54,14 @@ func (s *Server) Start(sockPath string) error {
 
 // Close shuts down the server and removes the socket file.
 func (s *Server) Close() error {
+	var closeErr error
 	if s.srv != nil {
-		s.srv.Close()
+		closeErr = s.srv.Close()
 	}
 	if s.sockPath != "" {
 		os.Remove(s.sockPath) //nolint:errcheck
 	}
-	return nil
+	return closeErr
 }
 
 func (s *Server) handleTypes(w http.ResponseWriter, _ *http.Request) {
@@ -70,7 +71,7 @@ func (s *Server) handleTypes(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	for _, t := range types {
-		fmt.Fprintln(w, t)
+		fmt.Fprintln(w, t) //nolint:errcheck
 	}
 }
 
@@ -90,5 +91,5 @@ func (s *Server) handleText(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "no text on clipboard", http.StatusNotFound)
 		return
 	}
-	fmt.Fprint(w, text)
+	fmt.Fprint(w, text) //nolint:errcheck
 }

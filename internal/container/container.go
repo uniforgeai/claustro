@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	cerrdefs "github.com/containerd/errdefs"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -18,6 +19,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/clipboard"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
+	claustromount "github.com/uniforgeai/claustro/internal/mount"
 )
 
 // CreateOptions configures optional parameters for container creation.
@@ -44,7 +46,7 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		"HOME=/home/sandbox",
 	}
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		env = append(env, "SSH_AUTH_SOCK="+sock)
+		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
 	}
 
 	cfg := &containertypes.Config{
@@ -277,7 +279,7 @@ func EnsureVolume(ctx context.Context, cli *client.Client, name string, labels m
 // RemoveVolume removes a named Docker volume, ignoring not-found errors.
 func RemoveVolume(ctx context.Context, cli *client.Client, name string) error {
 	err := cli.VolumeRemove(ctx, name, false)
-	if err != nil && !client.IsErrNotFound(err) {
+	if err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("removing volume %q: %w", name, err)
 	}
 	return nil
