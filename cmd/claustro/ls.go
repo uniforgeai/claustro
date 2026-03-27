@@ -53,9 +53,9 @@ func runLs(ctx context.Context, all bool) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	if all {
-		fmt.Fprintln(w, "PROJECT\tNAME\tCONTAINER\tSTATUS")
+		fmt.Fprintln(w, "PROJECT\tNAME\tCONTAINER\tSTATUS") //nolint:errcheck
 	} else {
-		fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS")
+		fmt.Fprintln(w, "NAME\tCONTAINER\tSTATUS") //nolint:errcheck
 	}
 
 	for _, c := range containers {
@@ -63,9 +63,9 @@ func runLs(ctx context.Context, all bool) error {
 		project := c.Labels["claustro.project"]
 		containerName := strings.TrimPrefix(c.Names[0], "/")
 		if all {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", project, name, containerName, c.Status)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", project, name, containerName, c.Status) //nolint:errcheck
 		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\n", name, containerName, c.Status)
+			fmt.Fprintf(w, "%s\t%s\t%s\n", name, containerName, c.Status) //nolint:errcheck
 		}
 	}
 	return w.Flush()

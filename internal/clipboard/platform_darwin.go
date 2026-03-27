@@ -30,7 +30,7 @@ func (h *darwinHandler) ReadImage() ([]byte, error) {
 		return nil, fmt.Errorf("creating temp file: %w", err)
 	}
 	name := f.Name()
-	f.Close()
+	_ = f.Close()
 	defer os.Remove(name) //nolint:errcheck
 
 	script := fmt.Sprintf(

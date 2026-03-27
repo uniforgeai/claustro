@@ -14,6 +14,6 @@ import (
 func TestVolumeFunction_Compile(t *testing.T) {
 	// Type-check: ensure the functions have the expected signatures by assigning
 	// them to typed variables. This will fail at compile time if signatures change.
-	var _ func(context.Context, *client.Client, string, map[string]string) error = EnsureVolume
-	var _ func(context.Context, *client.Client, string) error = RemoveVolume
+	var _ func(context.Context, *client.Client, string, map[string]string) error = EnsureVolume //nolint:staticcheck
+	var _ func(context.Context, *client.Client, string) error = RemoveVolume                   //nolint:staticcheck
 }

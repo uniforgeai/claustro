@@ -3,6 +3,7 @@ package mount
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	dockermount "github.com/docker/docker/api/types/mount"
@@ -110,6 +111,43 @@ func TestAssemble_sshDirMountedWhenEnabled(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "~/.ssh mount should be present when explicitly enabled")
+}
+
+func TestSSHAgentContainerSock_linux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-specific behaviour")
+	}
+	sock := "/run/user/1000/ssh-agent.sock"
+	assert.Equal(t, sock, SSHAgentContainerSock(sock), "on Linux, host socket path passes through unchanged")
+}
+
+func TestSSHAgentContainerSock_darwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific behaviour")
+	}
+	macSock := "/private/tmp/com.apple.launchd.ABC/Listeners"
+	got := SSHAgentContainerSock(macSock)
+	assert.Equal(t, dockerDesktopRelayPath, got, "on macOS, Docker Desktop relay path must be used")
+}
+
+func TestAssemble_agentForwardingEnabled_mountTarget(t *testing.T) {
+	// Regardless of platform, when agent forwarding is on the container must
+	// have exactly one mount whose Target matches SSHAgentContainerSock.
+	hostSock := "/tmp/test-agent.sock"
+	t.Setenv("SSH_AUTH_SOCK", hostSock)
+	git := &config.GitConfig{ForwardAgent: boolPtr(true)}
+	mounts, err := Assemble("/some/project", git, "")
+	require.NoError(t, err)
+
+	want := SSHAgentContainerSock(hostSock)
+	found := false
+	for _, m := range mounts {
+		if m.Target == want {
+			found = true
+			assert.Equal(t, want, m.Source, "Source and Target must match for SSH agent socket")
+		}
+	}
+	assert.True(t, found, "SSH agent socket mount with target %q not found", want)
 }
 
 func TestAssemble_agentForwardingDisabled(t *testing.T) {
