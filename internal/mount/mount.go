@@ -5,21 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/docker/docker/api/types/mount"
 	"github.com/uniforgeai/claustro/internal/config"
 )
 
 // Assemble returns the bind mounts needed for a sandbox:
-//   - hostProjectPath → /workspace  (source, read-write)
-//   - ~/.claude       → /home/sandbox/.claude  (Claude state, read-write)
-//   - ~/.claude.json  → /home/sandbox/.claude.json  (Claude config, read-write, if exists)
+//   - hostProjectPath      → /workspace  (source, read-write)
+//   - ~/.claude            → /home/sandbox/.claude  (Claude state, read-write)
+//   - ~/.claude.json       → /home/sandbox/.claude.json  (Claude config, read-write, if exists)
 //
 // Git/GitHub mounts are added conditionally based on git config:
-//   - ~/.gitconfig    → /home/sandbox/.gitconfig  (read-only, if exists and enabled)
-//   - ~/.config/gh/   → /home/sandbox/.config/gh/  (read-write, if exists and enabled)
-//   - $SSH_AUTH_SOCK  → same path inside container  (if set and agent forwarding enabled)
-//   - ~/.ssh/         → /home/sandbox/.ssh/  (read-only, if exists and explicitly enabled)
+//   - ~/.gitconfig         → /home/sandbox/.gitconfig  (read-only, if exists and enabled)
+//   - ~/.config/gh/        → /home/sandbox/.config/gh/  (read-write, if exists and enabled)
+//   - ~/.ssh/known_hosts   → /home/sandbox/.ssh/known_hosts  (read-only, if exists)
+//   - $SSH_AUTH_SOCK       → same path inside container  (if set and agent forwarding enabled)
+//   - ~/.ssh/*.pub         → /home/sandbox/.ssh/*.pub  (read-only, if agent forwarding enabled)
+//   - ~/.ssh/              → /home/sandbox/.ssh/  (read-only, if exists and explicitly enabled)
 //
 // clipboardSockDir, when non-empty, is created on the host and mounted at /run/claustro
 // inside the container so the clipboard bridge socket is accessible to shim scripts.
@@ -80,7 +83,18 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 		}
 	}
 
-	// SSH agent socket
+	// ~/.ssh/known_hosts (read-only, always mounted when present for SSH host key verification)
+	knownHosts := filepath.Join(home, ".ssh", "known_hosts")
+	if _, err := os.Stat(knownHosts); err == nil {
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   knownHosts,
+			Target:   "/home/sandbox/.ssh/known_hosts",
+			ReadOnly: true,
+		})
+	}
+
+	// SSH agent socket + public keys (when agent forwarding enabled)
 	if git.IsForwardAgent() {
 		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 			mounts = append(mounts, mount.Mount{
@@ -88,6 +102,23 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 				Source: sock,
 				Target: sock,
 			})
+		}
+
+		// Mount individual ~/.ssh/*.pub files so ssh-keygen can identify which
+		// agent key to use for commit signing without exposing private keys.
+		sshDir := filepath.Join(home, ".ssh")
+		if entries, err := os.ReadDir(sshDir); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ".pub") {
+					src := filepath.Join(sshDir, e.Name())
+					mounts = append(mounts, mount.Mount{
+						Type:     mount.TypeBind,
+						Source:   src,
+						Target:   "/home/sandbox/.ssh/" + e.Name(),
+						ReadOnly: true,
+					})
+				}
+			}
 		}
 	}
 

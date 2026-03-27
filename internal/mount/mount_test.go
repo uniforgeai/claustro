@@ -149,3 +149,80 @@ func TestAssemble_clipboardSockDir_createsDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "clipboard socket directory should be created")
 }
+
+func TestAssemble_knownHostsMountedWhenPresent(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	realKnownHosts := filepath.Join(home, ".ssh", "known_hosts")
+
+	mounts, err := Assemble("/some/project", nil, "")
+	require.NoError(t, err)
+
+	found := false
+	for _, m := range mounts {
+		if m.Target == "/home/sandbox/.ssh/known_hosts" {
+			found = true
+			assert.Equal(t, realKnownHosts, m.Source)
+			assert.True(t, m.ReadOnly, "known_hosts must be read-only")
+		}
+	}
+	if fileExists(realKnownHosts) {
+		assert.True(t, found, "known_hosts mount should be present when file exists")
+	} else {
+		assert.False(t, found, "known_hosts mount should be absent when file does not exist")
+	}
+}
+
+func TestAssemble_pubKeysMountedWithAgentForwarding(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	sshDir := filepath.Join(home, ".ssh")
+	entries, readErr := os.ReadDir(sshDir)
+	if readErr != nil {
+		t.Skip("~/.ssh does not exist on this machine")
+	}
+
+	var expectedPubs []string
+	for _, e := range entries {
+		if !e.IsDir() && len(e.Name()) > 4 && e.Name()[len(e.Name())-4:] == ".pub" {
+			expectedPubs = append(expectedPubs, e.Name())
+		}
+	}
+	if len(expectedPubs) == 0 {
+		t.Skip("no .pub files in ~/.ssh on this machine")
+	}
+
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+	git := &config.GitConfig{ForwardAgent: boolPtr(true)}
+	mounts, err := Assemble("/some/project", git, "")
+	require.NoError(t, err)
+
+	for _, name := range expectedPubs {
+		target := "/home/sandbox/.ssh/" + name
+		found := false
+		for _, m := range mounts {
+			if m.Target == target {
+				found = true
+				assert.Equal(t, filepath.Join(sshDir, name), m.Source)
+				assert.True(t, m.ReadOnly, ".pub mounts must be read-only")
+				break
+			}
+		}
+		assert.True(t, found, "expected pub key mount for %s", name)
+	}
+}
+
+func TestAssemble_pubKeysNotMountedWhenAgentDisabled(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
+	mounts, err := Assemble("/some/project", git, "")
+	require.NoError(t, err)
+	for _, m := range mounts {
+		assert.False(t, len(m.Target) > 16 &&
+			m.Target[:17] == "/home/sandbox/.ss" &&
+			len(m.Target) > 4 &&
+			m.Target[len(m.Target)-4:] == ".pub",
+			"no .pub mounts should appear when agent forwarding is disabled: %s", m.Target)
+	}
+}

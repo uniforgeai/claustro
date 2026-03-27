@@ -20,6 +20,20 @@ func TestTermEnvDefaultTerm(t *testing.T) {
 	require.Contains(t, env, "TERM=xterm-256color")
 }
 
+func TestGitEnvWithAgent(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+	env := gitEnv()
+	assert.Contains(t, env, "GIT_CONFIG_COUNT=1")
+	assert.Contains(t, env, "GIT_CONFIG_KEY_0=gpg.ssh.program")
+	assert.Contains(t, env, "GIT_CONFIG_VALUE_0=ssh-keygen")
+}
+
+func TestGitEnvWithoutAgent(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "")
+	env := gitEnv()
+	assert.Nil(t, env, "no git env vars should be injected when SSH agent is absent")
+}
+
 func TestTermEnvHostValues(t *testing.T) {
 	t.Setenv("TERM", "screen-256color")
 	t.Setenv("COLORTERM", "truecolor")
