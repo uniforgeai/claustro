@@ -24,5 +24,14 @@ if [ -n "$HOST_PATH" ]; then
     fi
 fi
 
+# Allow the sandbox user to reach the SSH agent socket.
+# On macOS the relay socket (/run/host-services/ssh-auth.sock) is owned by the
+# macOS host uid (501) with mode 0660; the sandbox user (uid 1000) has no access.
+# chmod 666 while still root gives all container users read/write on the socket
+# without affecting the socket semantics.
+if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+    chmod 666 "$SSH_AUTH_SOCK" 2>/dev/null || true
+fi
+
 # Hand off to sandbox user, running the provided command
 exec su -s /bin/sh sandbox -c "$(printf '%s ' "$@")"
