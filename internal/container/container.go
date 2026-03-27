@@ -18,6 +18,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/clipboard"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
+	claustromount "github.com/uniforgeai/claustro/internal/mount"
 )
 
 // CreateOptions configures optional parameters for container creation.
@@ -44,7 +45,7 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		"HOME=/home/sandbox",
 	}
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		env = append(env, "SSH_AUTH_SOCK="+sock)
+		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
 	}
 
 	cfg := &containertypes.Config{

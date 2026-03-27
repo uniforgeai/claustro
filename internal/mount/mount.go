@@ -5,11 +5,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/docker/docker/api/types/mount"
 	"github.com/uniforgeai/claustro/internal/config"
 )
+
+// dockerDesktopRelayPath is the SSH agent socket that Docker Desktop on macOS
+// exposes inside containers. The host SSH agent socket lives on the macOS side and
+// cannot be reached from the Linux VM; Docker Desktop relays it at this fixed path.
+const dockerDesktopRelayPath = "/run/host-services/ssh-auth.sock"
+
+// SSHAgentContainerSock returns the SSH_AUTH_SOCK value to set inside the container.
+// On macOS, Docker containers run in a Linux VM and cannot access the macOS-side SSH
+// agent socket directly. Docker Desktop relays it at a well-known fixed path instead.
+// On Linux, the host socket path is used unchanged.
+func SSHAgentContainerSock(hostSock string) string {
+	if runtime.GOOS == "darwin" {
+		return dockerDesktopRelayPath
+	}
+	return hostSock
+}
 
 // Assemble returns the bind mounts needed for a sandbox:
 //   - hostProjectPath      → /workspace  (source, read-write)
@@ -20,7 +37,7 @@ import (
 //   - ~/.gitconfig         → /home/sandbox/.gitconfig  (read-only, if exists and enabled)
 //   - ~/.config/gh/        → /home/sandbox/.config/gh/  (read-write, if exists and enabled)
 //   - ~/.ssh/known_hosts   → /home/sandbox/.ssh/known_hosts  (read-only, if exists)
-//   - $SSH_AUTH_SOCK       → same path inside container  (if set and agent forwarding enabled)
+//   - SSH agent socket     → container path via SSHAgentContainerSock  (if agent forwarding enabled)
 //   - ~/.ssh/*.pub         → /home/sandbox/.ssh/*.pub  (read-only, if agent forwarding enabled)
 //   - ~/.ssh/              → /home/sandbox/.ssh/  (read-only, if exists and explicitly enabled)
 //
@@ -96,7 +113,18 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 
 	// SSH agent socket + public keys (when agent forwarding enabled)
 	if git.IsForwardAgent() {
-		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		if runtime.GOOS == "darwin" {
+			// On macOS, Docker Desktop containers run in a Linux VM; the macOS SSH
+			// agent socket is not visible there. Docker Desktop relays it at a
+			// well-known path — mount that relay unconditionally so the agent is
+			// reachable regardless of the host SSH_AUTH_SOCK value.
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: dockerDesktopRelayPath,
+				Target: dockerDesktopRelayPath,
+			})
+		} else if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+			// On Linux, the agent socket is on the same kernel; mount it directly.
 			mounts = append(mounts, mount.Mount{
 				Type:   mount.TypeBind,
 				Source: sock,
