@@ -81,7 +81,7 @@ func buildImage(ctx context.Context, cli *client.Client, noCache bool, w io.Writ
 	if err != nil {
 		return fmt.Errorf("starting image build: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	return streamBuildOutput(resp.Body, w)
 }
@@ -186,7 +186,7 @@ func buildExtended(ctx context.Context, cli *client.Client, project string, step
 	if err != nil {
 		return fmt.Errorf("starting extension image build: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	return streamBuildOutput(resp.Body, w)
 }
@@ -240,7 +240,7 @@ func streamBuildOutput(r io.Reader, w io.Writer) error {
 			return fmt.Errorf("image build failed: %s", msg.Error)
 		}
 		if msg.Stream != "" {
-			fmt.Fprint(w, msg.Stream)
+			fmt.Fprint(w, msg.Stream) //nolint:errcheck
 		}
 	}
 	return scanner.Err()

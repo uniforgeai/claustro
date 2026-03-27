@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	cerrdefs "github.com/containerd/errdefs"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -278,7 +279,7 @@ func EnsureVolume(ctx context.Context, cli *client.Client, name string, labels m
 // RemoveVolume removes a named Docker volume, ignoring not-found errors.
 func RemoveVolume(ctx context.Context, cli *client.Client, name string) error {
 	err := cli.VolumeRemove(ctx, name, false)
-	if err != nil && !client.IsErrNotFound(err) {
+	if err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("removing volume %q: %w", name, err)
 	}
 	return nil
