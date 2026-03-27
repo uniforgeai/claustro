@@ -1,0 +1,44 @@
+#!/bin/sh
+# wl-paste shim — bridges to host clipboard via claustro socket.
+# Handles the argument patterns used by Claude Code's image paste.
+SOCK=/run/claustro/clipboard.sock
+
+if [ ! -S "$SOCK" ]; then
+    exit 1
+fi
+
+LIST=0
+TYPE=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -l|--list-types)
+            LIST=1
+            ;;
+        --type)
+            shift
+            TYPE="$1"
+            ;;
+        -n|--no-newline)
+            ;;  # ignore
+    esac
+    shift
+done
+
+if [ "$LIST" -eq 1 ]; then
+    curl -sf --unix-socket "$SOCK" http://localhost/types
+    exit $?
+fi
+
+if [ -n "$TYPE" ]; then
+    case "$TYPE" in
+        image/*)
+            curl -sf --unix-socket "$SOCK" http://localhost/image/png
+            ;;
+        *)
+            curl -sf --unix-socket "$SOCK" http://localhost/text
+            ;;
+    esac
+else
+    curl -sf --unix-socket "$SOCK" http://localhost/text
+fi

@@ -59,5 +59,5 @@ func runExec(ctx context.Context, name string, args []string) error {
 		return errNotRunning(id)
 	}
 
-	return container.Exec(ctx, cli, c.ID, args, false)
+	return container.Exec(ctx, cli, c.ID, args, container.ExecOptions{})
 }

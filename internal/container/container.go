@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"path/filepath"
 
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -13,6 +15,7 @@ import (
 	networktypes "github.com/docker/docker/api/types/network"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/clipboard"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
 )
@@ -84,20 +87,40 @@ func Start(ctx context.Context, cli *client.Client, containerID string) error {
 	return nil
 }
 
+// ExecOptions configures an Exec call.
+type ExecOptions struct {
+	// Interactive attaches stdin/stdout/stderr and allocates a TTY.
+	Interactive bool
+	// ClipboardSockDir is the host directory where the clipboard bridge socket will
+	// be created. When non-empty and Interactive is true, a clipboard server is
+	// started for the duration of the exec session.
+	ClipboardSockDir string
+}
+
 // Exec runs a command inside a running container.
-// If interactive is true, stdin/stdout/stderr are attached and a TTY is allocated.
-func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []string, interactive bool) error {
+func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []string, opts ExecOptions) error {
 	execCfg := containertypes.ExecOptions{
 		Cmd:          cmd,
-		AttachStdin:  interactive,
+		AttachStdin:  opts.Interactive,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          interactive,
+		Tty:          opts.Interactive,
 		User:         "sandbox",
 		WorkingDir:   "/workspace",
 	}
-	if interactive {
+	if opts.Interactive {
 		execCfg.Env = termEnv()
+	}
+
+	// Start clipboard bridge for interactive sessions when a socket dir is provided.
+	if opts.Interactive && opts.ClipboardSockDir != "" {
+		sockPath := filepath.Join(opts.ClipboardSockDir, "clipboard.sock")
+		srv := clipboard.New(clipboard.NewPlatformHandler())
+		if err := srv.Start(sockPath); err != nil {
+			slog.Warn("clipboard bridge unavailable", "err", err)
+		} else {
+			defer srv.Close() //nolint:errcheck
+		}
 	}
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
@@ -105,13 +128,13 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		return fmt.Errorf("creating exec: %w", err)
 	}
 
-	resp, err := cli.ContainerExecAttach(ctx, execID.ID, containertypes.ExecStartOptions{Tty: interactive})
+	resp, err := cli.ContainerExecAttach(ctx, execID.ID, containertypes.ExecStartOptions{Tty: opts.Interactive})
 	if err != nil {
 		return fmt.Errorf("attaching to exec: %w", err)
 	}
 	defer resp.Close()
 
-	if interactive {
+	if opts.Interactive {
 		// Set raw terminal mode for interactive sessions.
 		if err := setRawTerminal(); err == nil {
 			defer restoreTerminal()

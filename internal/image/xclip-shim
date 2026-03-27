@@ -1,0 +1,44 @@
+#!/bin/sh
+# xclip shim — bridges to host clipboard via claustro socket.
+# Handles the argument patterns used by Claude Code's image paste.
+SOCK=/run/claustro/clipboard.sock
+
+if [ ! -S "$SOCK" ]; then
+    exit 1
+fi
+
+TARGET=""
+OUTPUT=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -selection)
+            shift  # consume the value (e.g. "clipboard")
+            ;;
+        -t|-target)
+            shift
+            TARGET="$1"
+            ;;
+        -o|-out)
+            OUTPUT=1
+            ;;
+    esac
+    shift
+done
+
+[ "$OUTPUT" -eq 1 ] || exit 0
+
+case "$TARGET" in
+    TARGETS)
+        curl -sf --unix-socket "$SOCK" http://localhost/types
+        ;;
+    image/*)
+        curl -sf --unix-socket "$SOCK" http://localhost/image/png
+        ;;
+    text/*)
+        curl -sf --unix-socket "$SOCK" http://localhost/text
+        ;;
+    *)
+        curl -sf --unix-socket "$SOCK" http://localhost/types
+        ;;
+esac
