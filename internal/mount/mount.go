@@ -12,15 +12,16 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 )
 
-// dockerDesktopRelayPath is the SSH agent socket that Docker Desktop on macOS
-// exposes inside containers. The host SSH agent socket lives on the macOS side and
-// cannot be reached from the Linux VM; Docker Desktop relays it at this fixed path.
+// dockerDesktopRelayPath is the SSH agent socket path that macOS container runtimes
+// (Docker Desktop and OrbStack) expose inside containers. The host SSH agent socket
+// lives on the macOS side and cannot be reached from the Linux VM; both runtimes
+// synthesize this well-known relay path inside the container instead.
 const dockerDesktopRelayPath = "/run/host-services/ssh-auth.sock"
 
 // SSHAgentContainerSock returns the SSH_AUTH_SOCK value to set inside the container.
 // On macOS, Docker containers run in a Linux VM and cannot access the macOS-side SSH
-// agent socket directly. Docker Desktop relays it at a well-known fixed path instead.
-// On Linux, the host socket path is used unchanged.
+// agent socket directly. Docker Desktop and OrbStack both relay it at a well-known
+// fixed path. On Linux, the host socket path is used unchanged.
 func SSHAgentContainerSock(hostSock string) string {
 	if runtime.GOOS == "darwin" {
 		return dockerDesktopRelayPath
@@ -114,10 +115,10 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	// SSH agent socket + public keys (when agent forwarding enabled)
 	if git.IsForwardAgent() {
 		if runtime.GOOS == "darwin" {
-			// On macOS, Docker Desktop containers run in a Linux VM; the macOS SSH
-			// agent socket is not visible there. Docker Desktop relays it at a
-			// well-known path — mount that relay unconditionally so the agent is
-			// reachable regardless of the host SSH_AUTH_SOCK value.
+			// On macOS, containers run in a Linux VM; the macOS SSH agent socket is
+			// not visible there. Both Docker Desktop and OrbStack relay it at a
+			// well-known fixed path — mount that relay unconditionally so the agent
+			// is reachable regardless of the host SSH_AUTH_SOCK value.
 			mounts = append(mounts, mount.Mount{
 				Type:   mount.TypeBind,
 				Source: dockerDesktopRelayPath,
