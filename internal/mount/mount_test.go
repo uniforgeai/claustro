@@ -14,7 +14,7 @@ import (
 func boolPtr(b bool) *bool { return &b }
 
 func TestAssemble_basicMounts(t *testing.T) {
-	mounts, err := Assemble("/some/project", nil)
+	mounts, err := Assemble("/some/project", nil, "")
 	require.NoError(t, err)
 
 	// Must always have at least workspace + .claude
@@ -33,7 +33,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 	claudeJSON := filepath.Join(home, ".claude.json")
 	exists := fileExists(claudeJSON)
 
-	mounts, err := Assemble("/some/project", nil)
+	mounts, err := Assemble("/some/project", nil, "")
 	require.NoError(t, err)
 
 	found := false
@@ -47,7 +47,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 }
 
 func TestAssemble_allMountsAreBind(t *testing.T) {
-	mounts, err := Assemble("/any/path", nil)
+	mounts, err := Assemble("/any/path", nil, "")
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.Equal(t, dockermount.TypeBind, m.Type)
@@ -73,7 +73,7 @@ func fileExists(path string) bool {
 
 func TestAssemble_gitconfigDisabled(t *testing.T) {
 	git := &config.GitConfig{MountGitconfig: boolPtr(false)}
-	mounts, err := Assemble("/some/project", git)
+	mounts, err := Assemble("/some/project", git, "")
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/home/sandbox/.gitconfig", m.Target, "gitconfig mount should be absent when disabled")
@@ -81,7 +81,7 @@ func TestAssemble_gitconfigDisabled(t *testing.T) {
 }
 
 func TestAssemble_sshDirNotMountedByDefault(t *testing.T) {
-	mounts, err := Assemble("/some/project", nil)
+	mounts, err := Assemble("/some/project", nil, "")
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/home/sandbox/.ssh", m.Target, "~/.ssh should not be mounted by default")
@@ -98,7 +98,7 @@ func TestAssemble_sshDirMountedWhenEnabled(t *testing.T) {
 	}
 
 	git := &config.GitConfig{MountSSHDir: boolPtr(true)}
-	mounts, err := Assemble("/some/project", git)
+	mounts, err := Assemble("/some/project", git, "")
 	require.NoError(t, err)
 
 	found := false
@@ -115,9 +115,37 @@ func TestAssemble_sshDirMountedWhenEnabled(t *testing.T) {
 func TestAssemble_agentForwardingDisabled(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/fake.sock")
 	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
-	mounts, err := Assemble("/some/project", git)
+	mounts, err := Assemble("/some/project", git, "")
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/tmp/fake.sock", m.Target, "SSH agent socket should not be mounted when disabled")
 	}
+}
+
+func TestAssemble_clipboardSockDir(t *testing.T) {
+	sockDir := t.TempDir()
+	mounts, err := Assemble("/some/project", nil, sockDir)
+	require.NoError(t, err)
+
+	assertMount(t, mounts, sockDir, "/run/claustro", dockermount.TypeBind)
+}
+
+func TestAssemble_clipboardSockDir_empty_noMount(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil, "")
+	require.NoError(t, err)
+	for _, m := range mounts {
+		assert.NotEqual(t, "/run/claustro", m.Target, "/run/claustro should not be mounted when clipboardSockDir is empty")
+	}
+}
+
+func TestAssemble_clipboardSockDir_createsDir(t *testing.T) {
+	parent := t.TempDir()
+	sockDir := filepath.Join(parent, "new-socket-dir")
+
+	_, err := Assemble("/some/project", nil, sockDir)
+	require.NoError(t, err)
+
+	info, err := os.Stat(sockDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "clipboard socket directory should be created")
 }
