@@ -52,6 +52,20 @@ func TestErrNotRunning_CustomName(t *testing.T) {
 	assert.Contains(t, err.Error(), "--name staging")
 }
 
+func TestClaudeCmd_DescribesAutoUp(t *testing.T) {
+	root := makeRoot()
+	cmd := findSubcmd(root, "claude")
+	require.NotNil(t, cmd)
+	assert.Contains(t, cmd.Long, "Automatically starts a sandbox if none is running")
+}
+
+func TestClaudeCmd_Defaults(t *testing.T) {
+	cmd := newClaudeCmd()
+	f := cmd.Flags().Lookup("name")
+	assert.NotNil(t, f)
+	assert.Equal(t, "", f.DefValue)
+}
+
 func TestExecCmd_Defaults(t *testing.T) {
 	cmd := newExecCmd()
 	f := cmd.Flags().Lookup("name")

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -45,13 +46,41 @@ func runUp(ctx context.Context, name string) error {
 	}
 	defer cli.Close() //nolint:errcheck
 
+	id, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false)
+	if err != nil {
+		return err
+	}
+	if alreadyRunning {
+		return nil
+	}
+
+	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
+	if nameWasEmpty {
+		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
+		fmt.Printf("  Run: claustro shell --name %s\n", id.Name)
+		fmt.Printf("  Run: claustro claude --name %s\n", id.Name)
+	} else {
+		fmt.Printf("  Run: claustro shell  —  open a shell\n")
+		fmt.Printf("  Run: claustro claude —  start Claude Code\n")
+	}
+	return nil
+}
+
+// ensureRunning ensures a sandbox container is running for the given identity.
+// If the sandbox is already running, it returns alreadyRunning=true and takes no action.
+// When quiet is true, output is minimal (suitable for auto-up from the claude command).
+// The returned identity may differ from the input if the name was auto-generated and
+// required retry due to a collision.
+func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool) (_ *identity.Identity, alreadyRunning bool, _ error) {
 	existing, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
-		return fmt.Errorf("finding sandbox: %w", err)
+		return nil, false, fmt.Errorf("finding sandbox: %w", err)
 	}
 	if existing != nil && strings.Contains(existing.Status, "Up") {
-		fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
-		return nil
+		if !quiet {
+			fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
+		}
+		return id, true, nil
 	}
 
 	// If the name was auto-generated and a container with that name already exists,
@@ -63,11 +92,11 @@ func runUp(ctx context.Context, name string) error {
 			newName := identity.RandomName()
 			candidate, cerr := identity.FromCWD(newName)
 			if cerr != nil {
-				return fmt.Errorf("resolving identity: %w", cerr)
+				return nil, false, fmt.Errorf("resolving identity: %w", cerr)
 			}
 			collision, cerr := container.FindByIdentity(ctx, cli, candidate)
 			if cerr != nil {
-				return fmt.Errorf("finding sandbox: %w", cerr)
+				return nil, false, fmt.Errorf("finding sandbox: %w", cerr)
 			}
 			if collision == nil {
 				id = candidate
@@ -76,32 +105,36 @@ func runUp(ctx context.Context, name string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxRetries)
+			return nil, false, fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxRetries)
 		}
+	}
+
+	if quiet {
+		fmt.Fprintf(os.Stderr, "Starting sandbox %s...\n", id.ContainerName())
 	}
 
 	cfg, err := config.Load(id.HostPath)
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return nil, false, fmt.Errorf("loading config: %w", err)
 	}
 
 	var opts container.CreateOptions
 	if len(cfg.Image.Extra) > 0 {
 		steps := extraRunSteps(cfg.Image.Extra)
 		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
-			return fmt.Errorf("building extension image: %w", err)
+			return nil, false, fmt.Errorf("building extension image: %w", err)
 		}
 		opts.ImageName = image.ExtImageName(id.Project)
 	} else {
 		if err := image.EnsureBuilt(ctx, cli, os.Stdout); err != nil {
-			return fmt.Errorf("building image: %w", err)
+			return nil, false, fmt.Errorf("building image: %w", err)
 		}
 	}
 
 	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
 	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir)
 	if err != nil {
-		return fmt.Errorf("assembling mounts: %w", err)
+		return nil, false, fmt.Errorf("assembling mounts: %w", err)
 	}
 
 	// Ensure npm and pip cache volumes exist, then mount them.
@@ -115,7 +148,7 @@ func runUp(ctx context.Context, name string) error {
 	} {
 		volName := id.VolumeName(vol.purpose)
 		if err := container.EnsureVolume(ctx, cli, volName, labels); err != nil {
-			return fmt.Errorf("ensuring volume %q: %w", volName, err)
+			return nil, false, fmt.Errorf("ensuring volume %q: %w", volName, err)
 		}
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeVolume,
@@ -127,22 +160,13 @@ func runUp(ctx context.Context, name string) error {
 	slog.Info("creating sandbox", "container", id.ContainerName())
 	containerID, err := container.Create(ctx, cli, id, mounts, opts)
 	if err != nil {
-		return fmt.Errorf("creating container: %w", err)
+		return nil, false, fmt.Errorf("creating container: %w", err)
 	}
 	if err := container.Start(ctx, cli, containerID); err != nil {
-		return fmt.Errorf("starting container: %w", err)
+		return nil, false, fmt.Errorf("starting container: %w", err)
 	}
 
-	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
-	if nameWasEmpty {
-		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
-		fmt.Printf("  Run: claustro shell --name %s\n", id.Name)
-		fmt.Printf("  Run: claustro claude --name %s\n", id.Name)
-	} else {
-		fmt.Printf("  Run: claustro shell  —  open a shell\n")
-		fmt.Printf("  Run: claustro claude —  start Claude Code\n")
-	}
-	return nil
+	return id, false, nil
 }
 
 // extraRunSteps extracts the Run strings from a slice of ExtraStep.
