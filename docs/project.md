@@ -62,4 +62,4 @@ internal/mcp        → MCP server lifecycle (stdio pre-install, SSE sibling con
 | M1 | Core CLI + container lifecycle: `up`, `burn`, `nuke`, `rebuild`, `shell`, `claude`, `exec`, `status`, `logs`, `ls` |
 | M2 | Multi-sandbox + `claustro.yaml` config, `--workdir`, `--mount`, `.env` support |
 | M3 | Egress firewall (iptables), stdio MCP pre-install, SSE MCP sibling containers |
-| M4 | Distribution: Homebrew formula, cross-platform binaries, docs site |
+| M4 | Distribution: Homebrew formula, cross-platform binaries, docs site, CI/CD (GitHub Actions for tests, release, versioning) |
