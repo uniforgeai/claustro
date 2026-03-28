@@ -123,6 +123,47 @@ func TestNukeCmd_Defaults(t *testing.T) {
 	assert.Equal(t, "false", f.DefValue)
 }
 
+func TestUpCmd_NewFlags(t *testing.T) {
+	cmd := newUpCmd()
+	tests := []struct {
+		flag     string
+		defValue string
+	}{
+		{"name", ""},
+		{"workdir", ""},
+		{"mount", "[]"},
+		{"env", "[]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.flag, func(t *testing.T) {
+			f := cmd.Flags().Lookup(tt.flag)
+			require.NotNil(t, f, "flag %q should exist", tt.flag)
+			assert.Equal(t, tt.defValue, f.DefValue)
+		})
+	}
+}
+
+func TestParseEnvFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want map[string]string
+	}{
+		{"nil input", nil, nil},
+		{"empty input", []string{}, nil},
+		{"single", []string{"FOO=bar"}, map[string]string{"FOO": "bar"}},
+		{"multiple", []string{"A=1", "B=2"}, map[string]string{"A": "1", "B": "2"}},
+		{"value with equals", []string{"URL=http://host:8080/path?q=1"}, map[string]string{"URL": "http://host:8080/path?q=1"}},
+		{"no equals skipped", []string{"NOVALUE"}, map[string]string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseEnvFlags(tt.in)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestRebuildCmd_Defaults(t *testing.T) {
 	cmd := newRebuildCmd()
 	f := cmd.Flags().Lookup("restart")
