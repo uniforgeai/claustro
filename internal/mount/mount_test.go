@@ -186,6 +186,7 @@ func TestAssemble_clipboardSockDir_createsDir(t *testing.T) {
 	info, err := os.Stat(sockDir)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "clipboard socket directory should be created")
+	assert.Equal(t, os.FileMode(0o777), info.Mode().Perm(), "clipboard socket directory must be world-accessible so the sandbox user can traverse it")
 }
 
 func TestAssemble_knownHostsMountedWhenPresent(t *testing.T) {

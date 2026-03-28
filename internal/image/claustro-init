@@ -33,5 +33,12 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
     chmod 666 "$SSH_AUTH_SOCK" 2>/dev/null || true
 fi
 
+# Allow the sandbox user to access the clipboard bridge socket directory.
+# The directory is bind-mounted from the host (owned by the host uid, not uid 1000).
+# chmod 777 lets the sandbox user traverse the directory and connect to clipboard.sock.
+if [ -d /run/claustro ]; then
+    chmod 777 /run/claustro 2>/dev/null || true
+fi
+
 # Hand off to sandbox user, running the provided command
 exec su -s /bin/sh sandbox -c "$(printf '%s ' "$@")"

@@ -146,6 +146,20 @@ func TestServer_Text_absent(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
+func TestServer_Start_socketPermissions(t *testing.T) {
+	srv := New(&mockHandler{})
+
+	sockPath := tempSock(t)
+	require.NoError(t, srv.Start(sockPath))
+	defer srv.Close() //nolint:errcheck
+
+	info, err := os.Stat(sockPath)
+	require.NoError(t, err)
+	// Socket must be world-readable+writable so the sandbox user (uid 1000)
+	// can connect even though the socket is owned by the host user's uid.
+	assert.Equal(t, os.FileMode(0o666), info.Mode().Perm(), "clipboard socket must be world-readable+writable")
+}
+
 func TestServer_Close_removesSockFile(t *testing.T) {
 	srv := New(&mockHandler{})
 
