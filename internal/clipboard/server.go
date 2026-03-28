@@ -39,6 +39,12 @@ func (s *Server) Start(sockPath string) error {
 	if err != nil {
 		return fmt.Errorf("listening on clipboard socket: %w", err)
 	}
+	// Make the socket world-readable+writable so the sandbox user (uid 1000)
+	// can connect even though the socket is owned by the host user's uid.
+	if err := os.Chmod(sockPath, 0o666); err != nil {
+		ln.Close() //nolint:errcheck
+		return fmt.Errorf("setting clipboard socket permissions: %w", err)
+	}
 	s.sockPath = sockPath
 	s.listener = ln
 
