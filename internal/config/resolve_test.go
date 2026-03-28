@@ -122,3 +122,38 @@ func TestResolve_ImageNameFromConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "my-image:v2", sc.ImageName)
 }
+
+func TestResolve_ReadOnlyCLIOverride(t *testing.T) {
+	readOnly := true
+	cfg := &Config{
+		Defaults: DefaultsConfig{ReadOnly: boolPtr(false)},
+	}
+	cli := CLIOverrides{
+		Name:     "test",
+		ReadOnly: &readOnly,
+	}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.ReadOnly, "CLI --readonly should override config default")
+}
+
+func TestResolve_ReadOnlyCLINil_UsesDefault(t *testing.T) {
+	cfg := &Config{
+		Defaults: DefaultsConfig{ReadOnly: boolPtr(true)},
+	}
+	cli := CLIOverrides{Name: "test"}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.ReadOnly, "config default readonly should apply when CLI flag is nil")
+}
+
+func TestResolve_IsolatedStateCLIOverride(t *testing.T) {
+	cfg := &Config{}
+	cli := CLIOverrides{
+		Name:          "test",
+		IsolatedState: true,
+	}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.IsolatedState, "CLI --isolated-state should be reflected in SandboxConfig")
+}
