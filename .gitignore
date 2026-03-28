@@ -23,5 +23,8 @@ coverage.html
 # macOS
 .DS_Store
 
+# Claude Code local settings (user-specific, not shared)
+.claude/settings.local.json
+
 # Git worktree metadata (worktree dirs live outside the repo)
 .claude/worktrees/

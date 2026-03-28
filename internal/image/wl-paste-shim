@@ -1,9 +1,21 @@
 #!/bin/sh
-# wl-paste shim — bridges to host clipboard via claustro socket.
+# wl-paste shim — bridges to host clipboard via claustro TCP or Unix socket.
 # Handles the argument patterns used by Claude Code's image paste.
+#
+# On macOS hosts: clipboard server listens on TCP; port is in clipboard.port.
+# On Linux hosts: clipboard server listens on a Unix socket.
 SOCK=/run/claustro/clipboard.sock
+PORT_FILE=/run/claustro/clipboard.port
 
-if [ ! -S "$SOCK" ]; then
+# Determine connection method: TCP (macOS host) or Unix socket (Linux host).
+if [ -f "$PORT_FILE" ]; then
+    PORT=$(cat "$PORT_FILE")
+    BASE="http://host.docker.internal:${PORT}"
+    CURL_OPTS=""
+elif [ -S "$SOCK" ]; then
+    BASE="http://localhost"
+    CURL_OPTS="--unix-socket $SOCK"
+else
     exit 1
 fi
 
@@ -26,19 +38,19 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$LIST" -eq 1 ]; then
-    curl -sf --unix-socket "$SOCK" http://localhost/types
+    curl -sf $CURL_OPTS "${BASE}/types"
     exit $?
 fi
 
 if [ -n "$TYPE" ]; then
     case "$TYPE" in
         image/*)
-            curl -sf --unix-socket "$SOCK" http://localhost/image/png
+            curl -sf $CURL_OPTS "${BASE}/image/png"
             ;;
         *)
-            curl -sf --unix-socket "$SOCK" http://localhost/text
+            curl -sf $CURL_OPTS "${BASE}/text"
             ;;
     esac
 else
-    curl -sf --unix-socket "$SOCK" http://localhost/text
+    curl -sf $CURL_OPTS "${BASE}/text"
 fi
