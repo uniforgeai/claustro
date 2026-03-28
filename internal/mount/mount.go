@@ -42,9 +42,9 @@ func SSHAgentContainerSock(hostSock string) string {
 //   - ~/.ssh/*.pub         → /home/sandbox/.ssh/*.pub  (read-only, if agent forwarding enabled)
 //   - ~/.ssh/              → /home/sandbox/.ssh/  (read-only, if exists and explicitly enabled)
 //
-// When the host home differs from the container home (/home/sandbox), the plugin
-// cache is also mounted at its original host path (read-only) so Claude Code can
-// resolve the absolute paths stored in installed_plugins.json.
+// When the host home differs from the container home (/home/sandbox), the plugins
+// directory is also mounted at its original host path (read-only) so Claude Code can
+// resolve the absolute paths stored in installed_plugins.json and known_marketplaces.json.
 //
 // clipboardSockDir, when non-empty, is created on the host and mounted at /run/claustro
 // inside the container so the clipboard bridge socket is accessible to shim scripts.
@@ -168,18 +168,19 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 		}
 	}
 
-	// Plugin path remapping: installed_plugins.json stores absolute host paths
-	// (e.g. /Users/alice/.claude/plugins/cache/...). Inside the container the
-	// home dir is /home/sandbox, so those paths don't resolve. Mount the cache
-	// at the host's original path (read-only) so Claude Code can find plugins.
-	pluginCache := filepath.Join(home, ".claude", "plugins", "cache")
-	containerPluginCache := "/home/sandbox/.claude/plugins/cache"
-	if pluginCache != containerPluginCache {
-		if _, err := os.Stat(pluginCache); err == nil {
+	// Plugin path remapping: installed_plugins.json and known_marketplaces.json
+	// store absolute host paths (e.g. /Users/alice/.claude/plugins/...). Inside
+	// the container the home dir is /home/sandbox, so those paths don't resolve.
+	// Mount the entire plugins directory at its original host path (read-only)
+	// so Claude Code can find both plugin cache and marketplace data.
+	pluginDir := filepath.Join(home, ".claude", "plugins")
+	containerPluginDir := "/home/sandbox/.claude/plugins"
+	if pluginDir != containerPluginDir {
+		if _, err := os.Stat(pluginDir); err == nil {
 			mounts = append(mounts, mount.Mount{
 				Type:     mount.TypeBind,
-				Source:   pluginCache,
-				Target:   pluginCache,
+				Source:   pluginDir,
+				Target:   pluginDir,
 				ReadOnly: true,
 			})
 		}

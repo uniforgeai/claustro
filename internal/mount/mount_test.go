@@ -252,33 +252,31 @@ func TestAssemble_pubKeysMountedWithAgentForwarding(t *testing.T) {
 	}
 }
 
-func TestAssemble_pluginCacheRemappedWhenHomeDiffers(t *testing.T) {
+func TestAssemble_pluginDirRemappedWhenHomeDiffers(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 
-	pluginCache := filepath.Join(home, ".claude", "plugins", "cache")
-	containerCache := "/home/sandbox/.claude/plugins/cache"
+	pluginDir := filepath.Join(home, ".claude", "plugins")
+	containerDir := "/home/sandbox/.claude/plugins"
 
 	mounts, err := Assemble("/some/project", nil, "")
 	require.NoError(t, err)
 
 	if home == "/home/sandbox" {
-		// Inside a real container or if home happens to match, no extra mount needed.
 		for _, m := range mounts {
-			if m.Target == containerCache && m.Source == containerCache {
-				t.Error("should not add redundant plugin cache mount when home is /home/sandbox")
+			if m.Target == containerDir && m.Source == containerDir {
+				t.Error("should not add redundant plugin dir mount when home is /home/sandbox")
 			}
 		}
-	} else if fileExists(pluginCache) {
-		// Host home differs from container home — expect the remapping mount.
+	} else if fileExists(pluginDir) {
 		found := false
 		for _, m := range mounts {
-			if m.Target == pluginCache && m.Source == pluginCache {
+			if m.Target == pluginDir && m.Source == pluginDir {
 				found = true
-				assert.True(t, m.ReadOnly, "plugin cache remapping must be read-only")
+				assert.True(t, m.ReadOnly, "plugin dir remapping must be read-only")
 			}
 		}
-		assert.True(t, found, "plugin cache should be mounted at host path %s", pluginCache)
+		assert.True(t, found, "plugin dir should be mounted at host path %s", pluginDir)
 	}
 }
 
