@@ -34,7 +34,7 @@ func TestContainerLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	cwd, _ := os.Getwd()
-	mounts, err := mount.Assemble(cwd)
+	mounts, err := mount.Assemble(cwd, nil, "", false, false)
 	require.NoError(t, err)
 
 	// Cleanup any leftover container from previous runs
