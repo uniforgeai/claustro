@@ -11,27 +11,79 @@ import (
 
 // Config holds the full claustro project configuration from claustro.yaml.
 type Config struct {
-	Image ImageConfig `yaml:"image"`
-	Git   GitConfig   `yaml:"git"`
+	Project  string                `yaml:"project"`
+	RawImage yaml.Node             `yaml:"image"`
+	Defaults DefaultsConfig        `yaml:"defaults"`
+	Sandboxes map[string]SandboxDef `yaml:"sandboxes"`
+	Firewall FirewallConfig        `yaml:"firewall"`
+	MCP      MCPConfig             `yaml:"mcp"`
+	Git      GitConfig             `yaml:"git"`
+
+	// Parsed image fields (populated by postProcess).
+	ImageName   string
+	ImageConfig ImageConfig
+}
+
+// DefaultsConfig holds project-wide sandbox defaults.
+type DefaultsConfig struct {
+	Firewall  *bool           `yaml:"firewall"`
+	ReadOnly  *bool           `yaml:"readonly"`
+	Resources ResourcesConfig `yaml:"resources"`
+}
+
+// ResourcesConfig specifies container resource limits.
+type ResourcesConfig struct {
+	CPUs   string `yaml:"cpus"`
+	Memory string `yaml:"memory"`
+}
+
+// SandboxDef is a named sandbox configuration in claustro.yaml.
+type SandboxDef struct {
+	Workdir string            `yaml:"workdir"`
+	Mounts  []string          `yaml:"mounts"`
+	Env     map[string]string `yaml:"env"`
+}
+
+// FirewallConfig controls egress filtering.
+type FirewallConfig struct {
+	Enabled *bool    `yaml:"enabled"`
+	Allow   []string `yaml:"allow"`
+}
+
+// MCPConfig holds MCP server definitions.
+type MCPConfig struct {
+	Stdio map[string]MCPStdio `yaml:"stdio"`
+	SSE   map[string]MCPSSE   `yaml:"sse"`
+}
+
+// MCPStdio is a stdio-based MCP server.
+type MCPStdio struct {
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
+}
+
+// MCPSSE is an SSE-based MCP server running as a sibling container.
+type MCPSSE struct {
+	Image string            `yaml:"image"`
+	Env   map[string]string `yaml:"env"`
+}
+
+// ImageConfig configures how the sandbox image is built for this project.
+type ImageConfig struct {
+	Extra []ExtraStep `yaml:"extra"`
+}
+
+// ExtraStep is a single additional Dockerfile RUN step for the project's image extension.
+type ExtraStep struct {
+	Run string `yaml:"run"`
 }
 
 // GitConfig controls which host git/GitHub credentials are forwarded into the sandbox.
-// All forwarding is enabled by default (opt-out model). Set a field to false in
-// claustro.yaml to disable it.
 type GitConfig struct {
-	// ForwardAgent forwards the host SSH agent socket (SSH_AUTH_SOCK) when present.
-	// Default: true.
-	ForwardAgent *bool `yaml:"forward_agent"`
-	// MountGitconfig mounts ~/.gitconfig read-only into the sandbox.
-	// Default: true.
+	ForwardAgent   *bool `yaml:"forward_agent"`
 	MountGitconfig *bool `yaml:"mount_gitconfig"`
-	// MountGhConfig mounts ~/.config/gh/ read-write into the sandbox when the directory exists.
-	// Default: true.
-	MountGhConfig *bool `yaml:"mount_gh_config"`
-	// MountSSHDir mounts ~/.ssh/ read-only into the sandbox.
-	// Disabled by default — SSH agent forwarding is preferred.
-	// Default: false.
-	MountSSHDir *bool `yaml:"mount_ssh_dir"`
+	MountGhConfig  *bool `yaml:"mount_gh_config"`
+	MountSSHDir    *bool `yaml:"mount_ssh_dir"`
 }
 
 // IsForwardAgent returns true unless explicitly disabled in config.
@@ -45,16 +97,6 @@ func (g *GitConfig) IsMountGhConfig() bool { return g.MountGhConfig == nil || *g
 
 // IsMountSSHDir returns true only when explicitly enabled in config (default: false).
 func (g *GitConfig) IsMountSSHDir() bool { return g.MountSSHDir != nil && *g.MountSSHDir }
-
-// ImageConfig configures how the sandbox image is built for this project.
-type ImageConfig struct {
-	Extra []ExtraStep `yaml:"extra"`
-}
-
-// ExtraStep is a single additional Dockerfile RUN step for the project's image extension.
-type ExtraStep struct {
-	Run string `yaml:"run"`
-}
 
 // Load reads claustro.yaml from projectPath and returns the parsed Config.
 // If claustro.yaml is not present, an empty Config is returned with no error.
@@ -71,5 +113,28 @@ func Load(projectPath string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing claustro.yaml: %w", err)
 	}
+	if err := cfg.postProcess(); err != nil {
+		return nil, fmt.Errorf("parsing claustro.yaml image field: %w", err)
+	}
 	return &cfg, nil
+}
+
+// postProcess handles the dual image: syntax.
+// "image: name:tag" (scalar) sets ImageName.
+// "image:\n  extra: [...]" (mapping) sets ImageConfig.
+func (c *Config) postProcess() error {
+	if c.RawImage.IsZero() {
+		return nil
+	}
+	switch c.RawImage.Kind {
+	case yaml.ScalarNode:
+		c.ImageName = c.RawImage.Value
+	case yaml.MappingNode:
+		if err := c.RawImage.Decode(&c.ImageConfig); err != nil {
+			return fmt.Errorf("decoding image config: %w", err)
+		}
+	default:
+		return fmt.Errorf("image field must be a string or mapping, got %v", c.RawImage.Kind)
+	}
+	return nil
 }
