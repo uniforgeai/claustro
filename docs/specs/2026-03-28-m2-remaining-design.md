@@ -51,7 +51,7 @@ Use a named Docker volume for Claude state instead of bind-mounting the host `~/
 ### Behavior
 
 - `claustro up --isolated-state` creates a project-level Docker volume for Claude state
-- Volume name: `claustro-{project}_claude-state` (shared across all sandboxes in the project)
+- Volume name: `claustro-{project}-claude-state` (shared across all sandboxes in the project)
 - Volume is mounted at `/home/sandbox/.claude` inside the container
 - Host `~/.claude` is not bind-mounted and not affected
 - Host `~/.claude.json` is also not bind-mounted (host config doesn't apply)
@@ -72,7 +72,7 @@ Use a named Docker volume for Claude state instead of bind-mounting the host `~/
 - Add `isolatedState bool` parameter to `Assemble()` signature
 - When true, skip: `~/.claude` bind mount, `~/.claude.json` bind mount, plugin dir remount
 
-**`internal/identity/names.go`:**
+**`internal/identity/identity.go`:**
 - Add `ProjectVolumeName(project, purpose) string` that returns `claustro-{project}_{purpose}` (no sandbox name component, so the volume is shared across sandboxes)
 
 ---
@@ -84,7 +84,7 @@ Use a named Docker volume for Claude state instead of bind-mounting the host `~/
 | `cmd/claustro/up.go` | Two new flags, plumbing to Assemble and volume creation |
 | `internal/config/resolve.go` | `CLIOverrides` and `SandboxConfig` fields, override logic |
 | `internal/mount/mount.go` | Two new params to `Assemble()`, conditional mount logic |
-| `internal/identity/names.go` | `ProjectVolumeName()` helper |
+| `internal/identity/identity.go` | `ProjectVolumeName()` helper |
 | Tests for all of the above | |
 
 ## Out of scope
