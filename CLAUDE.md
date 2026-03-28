@@ -4,7 +4,7 @@
 
 claustro is a Go CLI tool that manages disposable Docker containers for running Claude Code safely against local source code. Source stays on the host (bind-mounted), containers are cheap to burn and respawn.
 
-**Authoritative spec:** `openspec/specs/spec.md` — read it before making non-trivial changes.
+**Authoritative spec:** `docs/specs/spec.md` — read it before making non-trivial changes.
 
 ## Tech Stack
 
@@ -22,7 +22,7 @@ claustro is a Go CLI tool that manages disposable Docker containers for running 
 cmd/claustro/         # main.go entrypoint and Cobra commands
 internal/             # private packages (container, config, identity, image, network, firewall, mcp)
 pkg/                  # public packages (if any emerge)
-openspec/             # specs and change management
+docs/                 # specs, plans, archive, project context
 ```
 
 ## Commands
@@ -91,7 +91,7 @@ refactor: extract container naming into identity package
 3. `golangci-lint run` passes with no new warnings.
 4. Commit messages follow Conventional Commits format.
 5. No secrets, API keys, or credentials in committed code.
-6. If the change touches a spec requirement, verify behavior matches `openspec/specs/spec.md`.
+6. If the change touches a spec requirement, verify behavior matches `docs/specs/spec.md`.
 
 ## Development Workflow
 
@@ -108,24 +108,26 @@ git checkout -b fix/volume-naming
 
 Use git worktrees for parallel or isolated work. The `superpowers:using-git-worktrees` skill handles setup automatically.
 
-### OpenSpec + Superpowers
+### Development Flow
 
-This project uses OpenSpec together with Superpowers skills for structured, high-quality development.
+This project uses Superpowers skills for structured development in two phases:
 
-**OpenSpec slash commands:**
-```
-/opsx:propose   — create a change with proposal, design, and tasks
-/opsx:explore   — explore the codebase before designing
-/opsx:apply     — implement tasks from a change (uses superpowers skills)
-/opsx:archive   — archive a completed change
-```
+**Phase 1 — Think (user in the loop):**
+1. `superpowers:brainstorming` — research, explore codebase, design
+2. Write spec to `docs/specs/` and plan to `docs/plans/`
+3. User reviews and approves
 
-**Key Superpowers skills used during implementation:**
-- `superpowers:brainstorming` — before any new feature, explore intent and design
-- `superpowers:writing-plans` — write a structured plan before touching code
-- `superpowers:test-driven-development` — write tests before implementation
-- `superpowers:using-git-worktrees` — isolate feature work in a worktree
-- `superpowers:verification-before-completion` — verify everything passes before claiming done
-- `superpowers:requesting-code-review` — review work before merging
+**Phase 2 — Build (agents run autonomously):**
+1. `superpowers:using-git-worktrees` — isolate work
+2. `superpowers:subagent-driven-development` or `superpowers:executing-plans` — implement tasks
+3. `superpowers:test-driven-development` — write tests before implementation
+4. `superpowers:verification-before-completion` — verify before claiming done
+5. Create PR for user review
+6. After merge, move completed plan to `docs/archive/`
 
-Use OpenSpec for features and milestones. Skip it for small, straightforward changes. Superpowers skills always apply.
+**Superpowers output locations (overrides skill defaults):**
+- Specs: `docs/specs/`
+- Plans: `docs/plans/`
+- Archive: `docs/archive/`
+
+**Skip the ceremony for small, straightforward changes.** Quality practices (TDD, verification, worktrees) always apply.
