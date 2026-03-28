@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	cerrdefs "github.com/containerd/errdefs"
 	containertypes "github.com/docker/docker/api/types/container"
@@ -115,13 +116,23 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 	}
 
 	// Start clipboard bridge for interactive sessions when a socket dir is provided.
+	// On macOS, Docker containers run in a Linux VM — Unix sockets created on the
+	// host are not reachable from inside the container. Use TCP + port file instead.
 	if opts.Interactive && opts.ClipboardSockDir != "" {
-		sockPath := filepath.Join(opts.ClipboardSockDir, "clipboard.sock")
 		srv := clipboard.New(clipboard.NewPlatformHandler())
-		if err := srv.Start(sockPath); err != nil {
-			slog.Warn("clipboard bridge unavailable", "err", err)
+		if runtime.GOOS == "darwin" {
+			if _, err := srv.StartTCP(opts.ClipboardSockDir); err != nil {
+				slog.Warn("clipboard bridge unavailable", "err", err)
+			} else {
+				defer srv.Close() //nolint:errcheck
+			}
 		} else {
-			defer srv.Close() //nolint:errcheck
+			sockPath := filepath.Join(opts.ClipboardSockDir, "clipboard.sock")
+			if err := srv.Start(sockPath); err != nil {
+				slog.Warn("clipboard bridge unavailable", "err", err)
+			} else {
+				defer srv.Close() //nolint:errcheck
+			}
 		}
 	}
 

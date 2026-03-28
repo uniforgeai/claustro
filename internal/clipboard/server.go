@@ -1,5 +1,7 @@
-// Package clipboard provides a Unix socket server that bridges the host clipboard
-// into claustro sandbox containers via a simple HTTP-over-Unix-socket API.
+// Package clipboard provides an HTTP server that bridges the host clipboard
+// into claustro sandbox containers. On Linux it uses a Unix socket; on macOS
+// (where Docker containers run in a VM and cannot reach host Unix sockets) it
+// uses TCP on 127.0.0.1 with port discovery via a file in the bind-mounted dir.
 package clipboard
 
 import (
@@ -7,7 +9,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 )
+
+// PortFileName is the name of the file written to the clipboard socket directory
+// containing the TCP port number. Container-side shims read this file to discover
+// how to reach the clipboard server on the host.
+const PortFileName = "clipboard.port"
 
 // PlatformHandler reads clipboard data from the host platform.
 type PlatformHandler interface {
@@ -20,10 +29,11 @@ type PlatformHandler interface {
 	ReadText() (string, error)
 }
 
-// Server is a Unix socket HTTP server exposing the host clipboard to a container.
+// Server is an HTTP server exposing the host clipboard to a container.
 type Server struct {
 	handler  PlatformHandler
 	sockPath string
+	portFile string
 	listener net.Listener
 	srv      *http.Server
 }
@@ -34,6 +44,7 @@ func New(handler PlatformHandler) *Server {
 }
 
 // Start starts the server, creating a Unix socket at sockPath.
+// Use this on Linux where bind-mounted Unix sockets work across namespaces.
 func (s *Server) Start(sockPath string) error {
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
@@ -48,17 +59,44 @@ func (s *Server) Start(sockPath string) error {
 	s.sockPath = sockPath
 	s.listener = ln
 
+	s.serve()
+	return nil
+}
+
+// StartTCP starts the server on TCP 127.0.0.1:0 (OS-assigned port) and writes
+// the port number to a file named clipboard.port in dir. Container-side shims
+// read this file and connect via host.docker.internal:<port>.
+// Use this on macOS where Unix sockets cannot cross the VM boundary.
+func (s *Server) StartTCP(dir string) (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, fmt.Errorf("listening on clipboard TCP: %w", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	s.listener = ln
+
+	portFile := filepath.Join(dir, PortFileName)
+	if err := os.WriteFile(portFile, []byte(strconv.Itoa(port)), 0o644); err != nil {
+		ln.Close() //nolint:errcheck
+		return 0, fmt.Errorf("writing clipboard port file: %w", err)
+	}
+	s.portFile = portFile
+
+	s.serve()
+	return port, nil
+}
+
+func (s *Server) serve() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/types", s.handleTypes)
 	mux.HandleFunc("/image/png", s.handleImagePNG)
 	mux.HandleFunc("/text", s.handleText)
 
 	s.srv = &http.Server{Handler: mux}
-	go s.srv.Serve(ln) //nolint:errcheck
-	return nil
+	go s.srv.Serve(s.listener) //nolint:errcheck
 }
 
-// Close shuts down the server and removes the socket file.
+// Close shuts down the server and removes the socket/port files.
 func (s *Server) Close() error {
 	var closeErr error
 	if s.srv != nil {
@@ -66,6 +104,9 @@ func (s *Server) Close() error {
 	}
 	if s.sockPath != "" {
 		os.Remove(s.sockPath) //nolint:errcheck
+	}
+	if s.portFile != "" {
+		os.Remove(s.portFile) //nolint:errcheck
 	}
 	return closeErr
 }
