@@ -605,3 +605,5 @@ The system SHALL be implemented in Go.
 - Cross-platform binaries
 - Documentation site
 - `claustro.yaml` validation and schema
+- GitHub Actions: CI test pipeline
+- GitHub Actions: release automation and versioning
