@@ -252,6 +252,36 @@ func TestAssemble_pubKeysMountedWithAgentForwarding(t *testing.T) {
 	}
 }
 
+func TestAssemble_pluginCacheRemappedWhenHomeDiffers(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	pluginCache := filepath.Join(home, ".claude", "plugins", "cache")
+	containerCache := "/home/sandbox/.claude/plugins/cache"
+
+	mounts, err := Assemble("/some/project", nil, "")
+	require.NoError(t, err)
+
+	if home == "/home/sandbox" {
+		// Inside a real container or if home happens to match, no extra mount needed.
+		for _, m := range mounts {
+			if m.Target == containerCache && m.Source == containerCache {
+				t.Error("should not add redundant plugin cache mount when home is /home/sandbox")
+			}
+		}
+	} else if fileExists(pluginCache) {
+		// Host home differs from container home — expect the remapping mount.
+		found := false
+		for _, m := range mounts {
+			if m.Target == pluginCache && m.Source == pluginCache {
+				found = true
+				assert.True(t, m.ReadOnly, "plugin cache remapping must be read-only")
+			}
+		}
+		assert.True(t, found, "plugin cache should be mounted at host path %s", pluginCache)
+	}
+}
+
 func TestAssemble_pubKeysNotMountedWhenAgentDisabled(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
