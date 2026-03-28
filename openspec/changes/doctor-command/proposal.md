@@ -39,7 +39,7 @@ claustro doctor
 | Base Image | `claustro-base:latest` exists locally | Run `claustro rebuild` |
 | Git Config | `~/.gitconfig` exists | Run `git config --global user.name/email` |
 | SSH Agent | `SSH_AUTH_SOCK` set and agent has keys | Run `ssh-add` |
-| GitHub CLI | `gh auth status` succeeds | Run `gh auth login` |
+| GitHub CLI | `gh auth status` succeeds, `oauth_token` present in `~/.config/gh/hosts.yml` | Run `gh auth login` on the host (token persists into sandboxes via bind mount) |
 | Clipboard | Host clipboard is accessible (platform-specific) | Install xclip/pbcopy or check Wayland |
 | Config File | `claustro.yaml` exists in CWD (optional, info only) | Not required — uses defaults |
 
