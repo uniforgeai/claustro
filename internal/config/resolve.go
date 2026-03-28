@@ -5,23 +5,26 @@ import "fmt"
 // SandboxConfig is the fully resolved, flat configuration for a single sandbox.
 // All merging (defaults, named sandbox, dotenv, CLI overrides) is already applied.
 type SandboxConfig struct {
-	Name      string
-	Workdir   string
-	Mounts    []Mount
-	Env       map[string]string
-	Firewall  bool
-	ReadOnly  bool
-	CPUs      string
-	Memory    string
-	ImageName string
+	Name          string
+	Workdir       string
+	Mounts        []Mount
+	Env           map[string]string
+	Firewall      bool
+	ReadOnly      bool
+	IsolatedState bool
+	CPUs          string
+	Memory        string
+	ImageName     string
 }
 
 // CLIOverrides holds values provided via CLI flags that override config file settings.
 type CLIOverrides struct {
-	Name    string
-	Workdir string
-	Mounts  []string
-	Env     map[string]string
+	Name          string
+	Workdir       string
+	Mounts        []string
+	Env           map[string]string
+	ReadOnly      *bool
+	IsolatedState bool
 }
 
 // Resolve merges defaults, named sandbox config, dotenv, and CLI overrides into a
@@ -88,6 +91,12 @@ func (c *Config) Resolve(projectRoot string, cli CLIOverrides, dotenv map[string
 	for k, v := range cli.Env {
 		sc.Env[k] = v
 	}
+
+	// CLI readonly override.
+	if cli.ReadOnly != nil {
+		sc.ReadOnly = *cli.ReadOnly
+	}
+	sc.IsolatedState = cli.IsolatedState
 
 	return sc, nil
 }

@@ -30,9 +30,9 @@ func SSHAgentContainerSock(hostSock string) string {
 }
 
 // Assemble returns the bind mounts needed for a sandbox:
-//   - hostProjectPath      → /workspace  (source, read-write)
-//   - ~/.claude            → /home/sandbox/.claude  (Claude state, read-write)
-//   - ~/.claude.json       → /home/sandbox/.claude.json  (Claude config, read-write, if exists)
+//   - hostProjectPath      → /workspace  (source, read-write by default; read-only when readOnly=true)
+//   - ~/.claude            → /home/sandbox/.claude  (Claude state, read-write, skipped when isolatedState=true)
+//   - ~/.claude.json       → /home/sandbox/.claude.json  (Claude config, read-write, if exists; skipped when isolatedState=true)
 //
 // Git/GitHub mounts are added conditionally based on git config:
 //   - ~/.gitconfig         → /home/sandbox/.gitconfig  (read-only, if exists and enabled)
@@ -45,10 +45,11 @@ func SSHAgentContainerSock(hostSock string) string {
 // When the host home differs from the container home (/home/sandbox), the plugins
 // directory is also mounted at its original host path (read-only) so Claude Code can
 // resolve the absolute paths stored in installed_plugins.json and known_marketplaces.json.
+// This remount is skipped when isolatedState=true.
 //
 // clipboardSockDir, when non-empty, is created on the host and mounted at /run/claustro
 // inside the container so the clipboard bridge socket is accessible to shim scripts.
-func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir string) ([]mount.Mount, error) {
+func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir string, readOnly, isolatedState bool) ([]mount.Mount, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("getting home directory: %w", err)
@@ -56,24 +57,28 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 
 	mounts := []mount.Mount{
 		{
-			Type:   mount.TypeBind,
-			Source: hostProjectPath,
-			Target: "/workspace",
-		},
-		{
-			Type:   mount.TypeBind,
-			Source: filepath.Join(home, ".claude"),
-			Target: "/home/sandbox/.claude",
+			Type:     mount.TypeBind,
+			Source:   hostProjectPath,
+			Target:   "/workspace",
+			ReadOnly: readOnly,
 		},
 	}
 
-	claudeJSON := filepath.Join(home, ".claude.json")
-	if _, err := os.Stat(claudeJSON); err == nil {
+	if !isolatedState {
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
-			Source: claudeJSON,
-			Target: "/home/sandbox/.claude.json",
+			Source: filepath.Join(home, ".claude"),
+			Target: "/home/sandbox/.claude",
 		})
+
+		claudeJSON := filepath.Join(home, ".claude.json")
+		if _, err := os.Stat(claudeJSON); err == nil {
+			mounts = append(mounts, mount.Mount{
+				Type:   mount.TypeBind,
+				Source: claudeJSON,
+				Target: "/home/sandbox/.claude.json",
+			})
+		}
 	}
 
 	if git == nil {
@@ -173,16 +178,18 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	// the container the home dir is /home/sandbox, so those paths don't resolve.
 	// Mount the entire plugins directory at its original host path (read-only)
 	// so Claude Code can find both plugin cache and marketplace data.
-	pluginDir := filepath.Join(home, ".claude", "plugins")
-	containerPluginDir := "/home/sandbox/.claude/plugins"
-	if pluginDir != containerPluginDir {
-		if _, err := os.Stat(pluginDir); err == nil {
-			mounts = append(mounts, mount.Mount{
-				Type:     mount.TypeBind,
-				Source:   pluginDir,
-				Target:   pluginDir,
-				ReadOnly: true,
-			})
+	if !isolatedState {
+		pluginDir := filepath.Join(home, ".claude", "plugins")
+		containerPluginDir := "/home/sandbox/.claude/plugins"
+		if pluginDir != containerPluginDir {
+			if _, err := os.Stat(pluginDir); err == nil {
+				mounts = append(mounts, mount.Mount{
+					Type:     mount.TypeBind,
+					Source:   pluginDir,
+					Target:   pluginDir,
+					ReadOnly: true,
+				})
+			}
 		}
 	}
 

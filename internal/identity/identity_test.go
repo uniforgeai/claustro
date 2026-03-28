@@ -136,6 +136,22 @@ func TestIdentity_VolumeName(t *testing.T) {
 	}
 }
 
+func TestProjectVolumeName(t *testing.T) {
+	tests := []struct {
+		project string
+		purpose string
+		want    string
+	}{
+		{"myapp", "claude-state", "claustro-myapp-claude-state"},
+		{"my-saas", "claude-state", "claustro-my-saas-claude-state"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, ProjectVolumeName(tt.project, tt.purpose))
+		})
+	}
+}
+
 func TestIdentity_Labels(t *testing.T) {
 	id := &Identity{Project: "my-saas", Name: "backend"}
 	labels := id.Labels()
