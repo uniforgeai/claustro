@@ -53,8 +53,8 @@ func runRebuild(ctx context.Context, restart bool, noExt bool) error {
 		return fmt.Errorf("rebuilding image: %w", err)
 	}
 
-	if !noExt && len(cfg.Image.Extra) > 0 {
-		steps := extraRunSteps(cfg.Image.Extra)
+	if !noExt && len(cfg.ImageConfig.Extra) > 0 {
+		steps := extraRunSteps(cfg.ImageConfig.Extra)
 		if err := image.BuildExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
 			return fmt.Errorf("rebuilding extension image: %w", err)
 		}

@@ -19,20 +19,48 @@ import (
 )
 
 func newUpCmd() *cobra.Command {
-	var name string
+	var (
+		name    string
+		workdir string
+		mounts  []string
+		envs    []string
+	)
 	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Create and start a sandbox",
 		Long:  "Build the claustro image if needed, then create and start a sandbox container.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUp(cmd.Context(), name)
+			cliEnv := parseEnvFlags(envs)
+			return runUp(cmd.Context(), name, config.CLIOverrides{
+				Name:    name,
+				Workdir: workdir,
+				Mounts:  mounts,
+				Env:     cliEnv,
+			})
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-generated)`)
+	cmd.Flags().StringVar(&workdir, "workdir", "", `Working directory inside the container`)
+	cmd.Flags().StringSliceVar(&mounts, "mount", nil, `Additional bind mount (host:container[:ro|rw])`)
+	cmd.Flags().StringSliceVar(&envs, "env", nil, `Environment variable (KEY=VALUE)`)
 	return cmd
 }
 
-func runUp(ctx context.Context, name string) error {
+// parseEnvFlags converts ["KEY=VALUE", ...] into a map.
+func parseEnvFlags(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(envs))
+	for _, e := range envs {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) error {
 	nameWasEmpty := name == ""
 
 	id, err := identity.FromCWD(name)
@@ -46,7 +74,7 @@ func runUp(ctx context.Context, name string) error {
 	}
 	defer cli.Close() //nolint:errcheck
 
-	id, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false)
+	id, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false, cliOverrides)
 	if err != nil {
 		return err
 	}
@@ -71,7 +99,7 @@ func runUp(ctx context.Context, name string) error {
 // When quiet is true, output is minimal (suitable for auto-up from the claude command).
 // The returned identity may differ from the input if the name was auto-generated and
 // required retry due to a collision.
-func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool) (_ *identity.Identity, alreadyRunning bool, _ error) {
+func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool, cliOverrides config.CLIOverrides) (_ *identity.Identity, alreadyRunning bool, _ error) {
 	existing, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
 		return nil, false, fmt.Errorf("finding sandbox: %w", err)
@@ -118,9 +146,26 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		return nil, false, fmt.Errorf("loading config: %w", err)
 	}
 
+	dotenv, err := config.LoadDotenv(id.HostPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("loading .env: %w", err)
+	}
+
+	resolved, err := cfg.Resolve(id.HostPath, cliOverrides, dotenv)
+	if err != nil {
+		return nil, false, fmt.Errorf("resolving config: %w", err)
+	}
+	slog.Debug("resolved sandbox config",
+		"name", resolved.Name,
+		"workdir", resolved.Workdir,
+		"mounts", len(resolved.Mounts),
+		"env_vars", len(resolved.Env),
+		"image", resolved.ImageName,
+	)
+
 	var opts container.CreateOptions
-	if len(cfg.Image.Extra) > 0 {
-		steps := extraRunSteps(cfg.Image.Extra)
+	if len(cfg.ImageConfig.Extra) > 0 {
+		steps := extraRunSteps(cfg.ImageConfig.Extra)
 		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
 			return nil, false, fmt.Errorf("building extension image: %w", err)
 		}

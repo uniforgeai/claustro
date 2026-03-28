@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
 )
@@ -67,7 +68,7 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 	}
 
 	// Ensure the sandbox is running, creating it if needed.
-	id, _, err = ensureRunning(ctx, cli, id, nameWasEmpty, true)
+	id, _, err = ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: name})
 	if err != nil {
 		return err
 	}
