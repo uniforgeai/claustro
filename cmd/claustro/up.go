@@ -20,10 +20,12 @@ import (
 
 func newUpCmd() *cobra.Command {
 	var (
-		name    string
-		workdir string
-		mounts  []string
-		envs    []string
+		name          string
+		workdir       string
+		mounts        []string
+		envs          []string
+		readOnly      bool
+		isolatedState bool
 	)
 	cmd := &cobra.Command{
 		Use:   "up",
@@ -31,11 +33,17 @@ func newUpCmd() *cobra.Command {
 		Long:  "Build the claustro image if needed, then create and start a sandbox container.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliEnv := parseEnvFlags(envs)
+			var readOnlyPtr *bool
+			if cmd.Flags().Changed("readonly") {
+				readOnlyPtr = &readOnly
+			}
 			return runUp(cmd.Context(), name, config.CLIOverrides{
-				Name:    name,
-				Workdir: workdir,
-				Mounts:  mounts,
-				Env:     cliEnv,
+				Name:          name,
+				Workdir:       workdir,
+				Mounts:        mounts,
+				Env:           cliEnv,
+				ReadOnly:      readOnlyPtr,
+				IsolatedState: isolatedState,
 			})
 		},
 	}
@@ -43,6 +51,8 @@ func newUpCmd() *cobra.Command {
 	cmd.Flags().StringVar(&workdir, "workdir", "", `Working directory inside the container`)
 	cmd.Flags().StringSliceVar(&mounts, "mount", nil, `Additional bind mount (host:container[:ro|rw])`)
 	cmd.Flags().StringSliceVar(&envs, "env", nil, `Environment variable (KEY=VALUE)`)
+	cmd.Flags().BoolVar(&readOnly, "readonly", false, `Mount source directory as read-only`)
+	cmd.Flags().BoolVar(&isolatedState, "isolated-state", false, `Use a Docker volume for Claude state instead of bind-mounting ~/.claude`)
 	return cmd
 }
 
@@ -177,9 +187,22 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	}
 
 	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
-	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir)
+	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir, resolved.ReadOnly, resolved.IsolatedState)
 	if err != nil {
 		return nil, false, fmt.Errorf("assembling mounts: %w", err)
+	}
+
+	// When isolated state is requested, create a project-scoped volume for Claude state.
+	if resolved.IsolatedState {
+		volName := identity.ProjectVolumeName(id.Project, "claude-state")
+		if err := container.EnsureVolume(ctx, cli, volName, id.Labels()); err != nil {
+			return nil, false, fmt.Errorf("ensuring claude state volume %q: %w", volName, err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volName,
+			Target: "/home/sandbox/.claude",
+		})
 	}
 
 	// Ensure npm and pip cache volumes exist, then mount them.
