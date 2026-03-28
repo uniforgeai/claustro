@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
@@ -15,8 +16,8 @@ func newClaudeCmd() *cobra.Command {
 	var name string
 	cmd := &cobra.Command{
 		Use:   "claude",
-		Short: "Launch Claude Code inside a running sandbox",
-		Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Pass extra args after '--'.",
+		Short: "Launch Claude Code inside a sandbox",
+		Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Automatically starts a sandbox if none is running. Pass extra args after '--'.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClaude(cmd.Context(), name, args)
 		},
@@ -27,8 +28,9 @@ func newClaudeCmd() *cobra.Command {
 }
 
 func runClaude(ctx context.Context, name string, extraArgs []string) error {
-	// Derive project slug from CWD for auto-select.
-	tmpID, err := identity.FromCWD("")
+	nameWasEmpty := name == ""
+
+	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
 	}
@@ -39,14 +41,35 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 	}
 	defer cli.Close() //nolint:errcheck
 
-	resolvedName, err := resolveName(ctx, cli, tmpID.Project, name)
-	if err != nil {
-		return err
+	// If a name was given, look for that specific sandbox.
+	// If no name was given, try to auto-select from running sandboxes.
+	if nameWasEmpty {
+		containers, err := container.ListByProject(ctx, cli, id.Project, false)
+		if err != nil {
+			return fmt.Errorf("listing sandboxes: %w", err)
+		}
+		switch len(containers) {
+		case 0:
+			// No sandbox running — auto-up.
+		case 1:
+			resolvedName := containers[0].Labels["claustro.name"]
+			id, err = identity.FromCWD(resolvedName)
+			if err != nil {
+				return fmt.Errorf("resolving identity: %w", err)
+			}
+		default:
+			names := make([]string, len(containers))
+			for i, c := range containers {
+				names[i] = "  " + c.Labels["claustro.name"]
+			}
+			return fmt.Errorf("multiple sandboxes running, specify --name:\n%s", strings.Join(names, "\n"))
+		}
 	}
 
-	id, err := identity.FromCWD(resolvedName)
+	// Ensure the sandbox is running, creating it if needed.
+	id, _, err = ensureRunning(ctx, cli, id, nameWasEmpty, true)
 	if err != nil {
-		return fmt.Errorf("resolving identity: %w", err)
+		return err
 	}
 
 	c, err := container.FindByIdentity(ctx, cli, id)
