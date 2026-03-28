@@ -15,7 +15,7 @@ import (
 func boolPtr(b bool) *bool { return &b }
 
 func TestAssemble_basicMounts(t *testing.T) {
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 
 	// Must always have at least workspace + .claude
@@ -34,7 +34,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 	claudeJSON := filepath.Join(home, ".claude.json")
 	exists := fileExists(claudeJSON)
 
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 
 	found := false
@@ -48,7 +48,7 @@ func TestAssemble_claudeJSONIncludedWhenPresent(t *testing.T) {
 }
 
 func TestAssemble_allMountsAreBind(t *testing.T) {
-	mounts, err := Assemble("/any/path", nil, "")
+	mounts, err := Assemble("/any/path", nil, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.Equal(t, dockermount.TypeBind, m.Type)
@@ -74,7 +74,7 @@ func fileExists(path string) bool {
 
 func TestAssemble_gitconfigDisabled(t *testing.T) {
 	git := &config.GitConfig{MountGitconfig: boolPtr(false)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/home/sandbox/.gitconfig", m.Target, "gitconfig mount should be absent when disabled")
@@ -82,7 +82,7 @@ func TestAssemble_gitconfigDisabled(t *testing.T) {
 }
 
 func TestAssemble_sshDirNotMountedByDefault(t *testing.T) {
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/home/sandbox/.ssh", m.Target, "~/.ssh should not be mounted by default")
@@ -99,7 +99,7 @@ func TestAssemble_sshDirMountedWhenEnabled(t *testing.T) {
 	}
 
 	git := &config.GitConfig{MountSSHDir: boolPtr(true)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 
 	found := false
@@ -136,7 +136,7 @@ func TestAssemble_agentForwardingEnabled_mountTarget(t *testing.T) {
 	hostSock := "/tmp/test-agent.sock"
 	t.Setenv("SSH_AUTH_SOCK", hostSock)
 	git := &config.GitConfig{ForwardAgent: boolPtr(true)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 
 	want := SSHAgentContainerSock(hostSock)
@@ -153,7 +153,7 @@ func TestAssemble_agentForwardingEnabled_mountTarget(t *testing.T) {
 func TestAssemble_agentForwardingDisabled(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/fake.sock")
 	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/tmp/fake.sock", m.Target, "SSH agent socket should not be mounted when disabled")
@@ -162,14 +162,14 @@ func TestAssemble_agentForwardingDisabled(t *testing.T) {
 
 func TestAssemble_clipboardSockDir(t *testing.T) {
 	sockDir := t.TempDir()
-	mounts, err := Assemble("/some/project", nil, sockDir)
+	mounts, err := Assemble("/some/project", nil, sockDir, false, false)
 	require.NoError(t, err)
 
 	assertMount(t, mounts, sockDir, "/run/claustro", dockermount.TypeBind)
 }
 
 func TestAssemble_clipboardSockDir_empty_noMount(t *testing.T) {
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.NotEqual(t, "/run/claustro", m.Target, "/run/claustro should not be mounted when clipboardSockDir is empty")
@@ -180,7 +180,7 @@ func TestAssemble_clipboardSockDir_createsDir(t *testing.T) {
 	parent := t.TempDir()
 	sockDir := filepath.Join(parent, "new-socket-dir")
 
-	_, err := Assemble("/some/project", nil, sockDir)
+	_, err := Assemble("/some/project", nil, sockDir, false, false)
 	require.NoError(t, err)
 
 	info, err := os.Stat(sockDir)
@@ -194,7 +194,7 @@ func TestAssemble_knownHostsMountedWhenPresent(t *testing.T) {
 	require.NoError(t, err)
 	realKnownHosts := filepath.Join(home, ".ssh", "known_hosts")
 
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 
 	found := false
@@ -234,7 +234,7 @@ func TestAssemble_pubKeysMountedWithAgentForwarding(t *testing.T) {
 
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	git := &config.GitConfig{ForwardAgent: boolPtr(true)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 
 	for _, name := range expectedPubs {
@@ -259,7 +259,7 @@ func TestAssemble_pluginDirRemappedWhenHomeDiffers(t *testing.T) {
 	pluginDir := filepath.Join(home, ".claude", "plugins")
 	containerDir := "/home/sandbox/.claude/plugins"
 
-	mounts, err := Assemble("/some/project", nil, "")
+	mounts, err := Assemble("/some/project", nil, "", false, false)
 	require.NoError(t, err)
 
 	if home == "/home/sandbox" {
@@ -283,7 +283,7 @@ func TestAssemble_pluginDirRemappedWhenHomeDiffers(t *testing.T) {
 func TestAssemble_pubKeysNotMountedWhenAgentDisabled(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	git := &config.GitConfig{ForwardAgent: boolPtr(false)}
-	mounts, err := Assemble("/some/project", git, "")
+	mounts, err := Assemble("/some/project", git, "", false, false)
 	require.NoError(t, err)
 	for _, m := range mounts {
 		assert.False(t, len(m.Target) > 16 &&
@@ -292,4 +292,75 @@ func TestAssemble_pubKeysNotMountedWhenAgentDisabled(t *testing.T) {
 			m.Target[len(m.Target)-4:] == ".pub",
 			"no .pub mounts should appear when agent forwarding is disabled: %s", m.Target)
 	}
+}
+
+func TestAssemble_readOnlySource(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil, "", true, false)
+	require.NoError(t, err)
+
+	for _, m := range mounts {
+		if m.Target == "/workspace" {
+			assert.True(t, m.ReadOnly, "/workspace should be read-only when readOnly=true")
+			return
+		}
+	}
+	t.Fatal("no /workspace mount found")
+}
+
+func TestAssemble_readOnlyFalse_sourceIsRW(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil, "", false, false)
+	require.NoError(t, err)
+
+	for _, m := range mounts {
+		if m.Target == "/workspace" {
+			assert.False(t, m.ReadOnly, "/workspace should be read-write when readOnly=false")
+			return
+		}
+	}
+	t.Fatal("no /workspace mount found")
+}
+
+func TestAssemble_isolatedState_skipsClaudeMounts(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil, "", false, true)
+	require.NoError(t, err)
+
+	for _, m := range mounts {
+		switch m.Target {
+		case "/home/sandbox/.claude":
+			t.Error("~/.claude bind mount should be skipped when isolatedState=true")
+		case "/home/sandbox/.claude.json":
+			t.Error("~/.claude.json bind mount should be skipped when isolatedState=true")
+		}
+	}
+}
+
+func TestAssemble_isolatedState_skipsPluginRemount(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	pluginDir := filepath.Join(home, ".claude", "plugins")
+	if !fileExists(pluginDir) {
+		t.Skip("~/.claude/plugins does not exist")
+	}
+	if home == "/home/sandbox" {
+		t.Skip("home is /home/sandbox, plugin remount never applies")
+	}
+
+	mounts, err := Assemble("/some/project", nil, "", false, true)
+	require.NoError(t, err)
+
+	for _, m := range mounts {
+		if m.Target == pluginDir && m.Source == pluginDir {
+			t.Error("plugin dir remount should be skipped when isolatedState=true")
+		}
+	}
+}
+
+func TestAssemble_notIsolated_includesClaudeMount(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	mounts, err := Assemble("/some/project", nil, "", false, false)
+	require.NoError(t, err)
+
+	assertMount(t, mounts, filepath.Join(home, ".claude"), "/home/sandbox/.claude", dockermount.TypeBind)
 }
