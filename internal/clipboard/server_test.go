@@ -2,6 +2,7 @@ package clipboard
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -173,4 +174,86 @@ func TestServer_Close_removesSockFile(t *testing.T) {
 
 	_, err = os.Stat(sockPath)
 	assert.True(t, os.IsNotExist(err), "socket file should be removed after Close")
+}
+
+// --- TCP mode tests ---
+
+func TestServer_StartTCP_listensAndWritesPortFile(t *testing.T) {
+	handler := &mockHandler{types: []string{"image/png"}}
+	srv := New(handler)
+
+	dir := t.TempDir()
+	port, err := srv.StartTCP(dir)
+	require.NoError(t, err)
+	defer srv.Close() //nolint:errcheck
+
+	assert.Greater(t, port, 0)
+
+	// Port file should exist with correct content.
+	portFile := filepath.Join(dir, PortFileName)
+	data, err := os.ReadFile(portFile)
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%d", port), string(data))
+
+	// HTTP request via TCP should work.
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/types", port))
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "image/png")
+}
+
+func TestServer_StartTCP_imagePNG(t *testing.T) {
+	pngData := []byte{0x89, 0x50, 0x4E, 0x47}
+	srv := New(&mockHandler{imageData: pngData})
+
+	dir := t.TempDir()
+	port, err := srv.StartTCP(dir)
+	require.NoError(t, err)
+	defer srv.Close() //nolint:errcheck
+
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/image/png", port))
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "image/png", resp.Header.Get("Content-Type"))
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, pngData, body)
+}
+
+func TestServer_StartTCP_text(t *testing.T) {
+	srv := New(&mockHandler{text: "hello tcp"})
+
+	dir := t.TempDir()
+	port, err := srv.StartTCP(dir)
+	require.NoError(t, err)
+	defer srv.Close() //nolint:errcheck
+
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/text", port))
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, "hello tcp", string(body))
+}
+
+func TestServer_Close_removesPortFile(t *testing.T) {
+	srv := New(&mockHandler{})
+
+	dir := t.TempDir()
+	_, err := srv.StartTCP(dir)
+	require.NoError(t, err)
+
+	portFile := filepath.Join(dir, PortFileName)
+	_, err = os.Stat(portFile)
+	require.NoError(t, err, "port file should exist after StartTCP")
+
+	require.NoError(t, srv.Close())
+
+	_, err = os.Stat(portFile)
+	assert.True(t, os.IsNotExist(err), "port file should be removed after Close")
 }
