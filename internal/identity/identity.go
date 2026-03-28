@@ -79,6 +79,12 @@ func (id *Identity) VolumeName(purpose string) string {
 	return fmt.Sprintf("claustro-%s-%s-%s", id.Project, id.Name, purpose)
 }
 
+// ProjectVolumeName returns a Docker volume name scoped to the project (not a specific sandbox).
+// Format: claustro-{project}-{purpose}
+func ProjectVolumeName(project, purpose string) string {
+	return fmt.Sprintf("claustro-%s-%s", project, purpose)
+}
+
 // Labels returns the Docker labels to apply to all resources for this sandbox.
 func (id *Identity) Labels() map[string]string {
 	return map[string]string{
