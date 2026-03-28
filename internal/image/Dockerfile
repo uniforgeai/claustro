@@ -50,9 +50,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code ccstatusline \
+RUN npm install -g @anthropic-ai/claude-code \
     && mkdir -p /home/sandbox/.local/bin \
     && ln -sf "$(which claude)" /home/sandbox/.local/bin/claude
+
+# Install ccstatusline (optional — native build may fail on some architectures)
+RUN npm install -g ccstatusline || true
 
 # Install clipboard shims (xclip and wl-paste) that bridge to the host clipboard
 # via the claustro Unix socket mounted at /run/claustro/clipboard.sock.

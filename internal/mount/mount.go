@@ -166,8 +166,13 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 
 	// Clipboard bridge socket directory
 	if clipboardSockDir != "" {
-		if err := os.MkdirAll(clipboardSockDir, 0o700); err != nil {
+		if err := os.MkdirAll(clipboardSockDir, 0o777); err != nil {
 			return nil, fmt.Errorf("creating clipboard socket directory: %w", err)
+		}
+		// Explicitly chmod to override umask — the sandbox user (uid 1000) must be
+		// able to traverse this directory even though it is owned by the host uid.
+		if err := os.Chmod(clipboardSockDir, 0o777); err != nil {
+			return nil, fmt.Errorf("setting clipboard socket directory permissions: %w", err)
 		}
 		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeBind,
