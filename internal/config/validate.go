@@ -38,7 +38,6 @@ type ValidationResult struct {
 
 var (
 	memoryPattern      = regexp.MustCompile(`(?i)^\d+[GMK]$`)
-	mountPattern       = regexp.MustCompile(`^[^:]+:[^:]+(?::[^:]+)?$`)
 	sandboxNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 )
 

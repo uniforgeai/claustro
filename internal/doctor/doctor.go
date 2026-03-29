@@ -67,7 +67,7 @@ func CheckDocker(ctx context.Context) CheckResult {
 			FixHint: "Install or start Docker",
 		}
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ping, err := cli.Ping(ctx)
 	if err != nil {
@@ -147,7 +147,7 @@ func CheckBaseImage(ctx context.Context, cli client.APIClient) CheckResult {
 		}
 	}
 
-	inspect, _, err := cli.ImageInspectWithRaw(ctx, "claustro-base:latest")
+	inspect, err := cli.ImageInspect(ctx, "claustro-base:latest")
 	if err != nil {
 		slog.Debug("base image inspect failed", "error", err)
 		return CheckResult{
