@@ -1,0 +1,73 @@
+version: 2
+
+project_name: claustro
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: claustro
+    main: ./cmd/claustro
+    binary: claustro
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: claustro
+    builds:
+      - claustro
+    format_overrides:
+      - goos: darwin
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+    - title: Bug Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+    - title: Refactoring
+      regexp: '^.*?refactor(\(.+\))??!?:.+$'
+
+brews:
+  - name: claustro
+    repository:
+      owner: uniforgeai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/uniforgeai/claustro"
+    description: "Disposable Docker sandboxes for Claude Code"
+    license: "MIT"
+    install: |
+      bin.install "claustro"
+    test: |
+      system "#{bin}/claustro", "--help"
+
+release:
+  github:
+    owner: uniforgeai
+    name: claustro
+  draft: false
+  prerelease: auto

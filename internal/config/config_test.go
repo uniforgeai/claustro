@@ -128,7 +128,7 @@ mcp:
   stdio:
     filesystem:
       command: npx
-      args: ["-y", "@anthropic-ai/mcp-server-filesystem", "/workspace"]
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
   sse:
     postgres:
       image: crystaldba/postgres-mcp-server:latest
@@ -173,7 +173,7 @@ git:
 
 	require.Contains(t, cfg.MCP.Stdio, "filesystem")
 	assert.Equal(t, "npx", cfg.MCP.Stdio["filesystem"].Command)
-	assert.Equal(t, []string{"-y", "@anthropic-ai/mcp-server-filesystem", "/workspace"}, cfg.MCP.Stdio["filesystem"].Args)
+	assert.Equal(t, []string{"-y", "@modelcontextprotocol/server-filesystem", "/workspace"}, cfg.MCP.Stdio["filesystem"].Args)
 
 	require.Contains(t, cfg.MCP.SSE, "postgres")
 	assert.Equal(t, "crystaldba/postgres-mcp-server:latest", cfg.MCP.SSE["postgres"].Image)
@@ -238,6 +238,37 @@ image:
 	assert.Empty(t, cfg.ImageName)
 	require.Len(t, cfg.ImageConfig.Extra, 1)
 	assert.Equal(t, "apt-get install -y curl", cfg.ImageConfig.Extra[0].Run)
+}
+
+func TestLoad_ValidationErrors(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+defaults:
+  resources:
+    cpus: "not-a-number"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	_, err = Load(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid claustro.yaml")
+	assert.Contains(t, err.Error(), "defaults.resources.cpus")
+}
+
+func TestLoad_ValidationWarnings_DoNotBlock(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+defaults:
+  resources:
+    cpus: "0"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	cfg, err := Load(dir)
+	require.NoError(t, err, "cpus=0 should produce a warning, not block load")
+	assert.Equal(t, "0", cfg.Defaults.Resources.CPUs)
 }
 
 func TestLoad_GitOnly(t *testing.T) {

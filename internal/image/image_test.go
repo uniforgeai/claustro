@@ -9,10 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uniforgeai/claustro/internal/config"
 )
 
 func TestBuildContext_ContainsRequiredFiles(t *testing.T) {
-	ctx, err := buildContext()
+	defaultCfg := config.DefaultImageBuildConfig()
+	ctx, err := buildContext(&defaultCfg)
 	require.NoError(t, err)
 	assert.NotEmpty(t, ctx)
 
@@ -32,7 +34,8 @@ func TestBuildContext_ContainsRequiredFiles(t *testing.T) {
 }
 
 func TestBuildContext_InitScriptIsExecutable(t *testing.T) {
-	ctx, err := buildContext()
+	defaultCfg := config.DefaultImageBuildConfig()
+	ctx, err := buildContext(&defaultCfg)
 	require.NoError(t, err)
 
 	tr := tar.NewReader(bytes.NewReader(ctx))

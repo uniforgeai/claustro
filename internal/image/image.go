@@ -20,10 +20,8 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/config"
 )
-
-//go:embed Dockerfile
-var dockerfile []byte
 
 //go:embed claustro-init
 var initScript []byte
@@ -38,7 +36,7 @@ const ImageName = "claustro:latest"
 
 // EnsureBuilt checks whether the claustro image exists and builds it if not.
 // Build output is written to w.
-func EnsureBuilt(ctx context.Context, cli *client.Client, w io.Writer) error {
+func EnsureBuilt(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig, w io.Writer) error {
 	exists, err := imageExists(ctx, cli)
 	if err != nil {
 		return fmt.Errorf("checking image: %w", err)
@@ -47,14 +45,14 @@ func EnsureBuilt(ctx context.Context, cli *client.Client, w io.Writer) error {
 		return nil
 	}
 	slog.Info("building image", "image", ImageName)
-	return buildImage(ctx, cli, false, w)
+	return buildImage(ctx, cli, imgCfg, false, w)
 }
 
 // Build forces a full rebuild of the claustro image regardless of whether it exists.
 // Build output is written to w.
-func Build(ctx context.Context, cli *client.Client, w io.Writer) error {
+func Build(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig, w io.Writer) error {
 	slog.Info("rebuilding image", "image", ImageName)
-	return buildImage(ctx, cli, true, w)
+	return buildImage(ctx, cli, imgCfg, true, w)
 }
 
 func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
@@ -66,8 +64,8 @@ func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
 	return len(images) > 0, nil
 }
 
-func buildImage(ctx context.Context, cli *client.Client, noCache bool, w io.Writer) error {
-	buildCtx, err := buildContext()
+func buildImage(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig, noCache bool, w io.Writer) error {
+	buildCtx, err := buildContext(imgCfg)
 	if err != nil {
 		return fmt.Errorf("creating build context: %w", err)
 	}
@@ -87,7 +85,12 @@ func buildImage(ctx context.Context, cli *client.Client, noCache bool, w io.Writ
 }
 
 // buildContext creates an in-memory tar archive containing the Dockerfile and init script.
-func buildContext() ([]byte, error) {
+func buildContext(imgCfg *config.ImageBuildConfig) ([]byte, error) {
+	renderedDockerfile, err := RenderDockerfile(imgCfg)
+	if err != nil {
+		return nil, fmt.Errorf("rendering Dockerfile template: %w", err)
+	}
+
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -96,7 +99,7 @@ func buildContext() ([]byte, error) {
 		data []byte
 		mode int64
 	}{
-		{"Dockerfile", dockerfile, 0644},
+		{"Dockerfile", []byte(renderedDockerfile), 0644},
 		{"claustro-init", initScript, 0755},
 		{"xclip-shim", xclipShim, 0755},
 		{"wl-paste-shim", wlPasteShim, 0755},

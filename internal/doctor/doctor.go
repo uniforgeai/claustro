@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/config"
 )
 
 // CheckStatus represents the outcome of a health check.
@@ -66,7 +67,7 @@ func CheckDocker(ctx context.Context) CheckResult {
 			FixHint: "Install or start Docker",
 		}
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ping, err := cli.Ping(ctx)
 	if err != nil {
@@ -146,7 +147,7 @@ func CheckBaseImage(ctx context.Context, cli client.APIClient) CheckResult {
 		}
 	}
 
-	inspect, _, err := cli.ImageInspectWithRaw(ctx, "claustro-base:latest")
+	inspect, err := cli.ImageInspect(ctx, "claustro-base:latest")
 	if err != nil {
 		slog.Debug("base image inspect failed", "error", err)
 		return CheckResult{
@@ -328,8 +329,7 @@ func CheckClipboard() CheckResult {
 	}
 }
 
-// CheckConfigFile checks if claustro.yaml exists in the given directory.
-// This is info-only and never returns Fail.
+// CheckConfigFile checks if claustro.yaml exists in the given directory and validates it.
 func CheckConfigFile(dir string) CheckResult {
 	name := "Config File"
 
@@ -338,8 +338,48 @@ func CheckConfigFile(dir string) CheckResult {
 		return CheckResult{
 			Name:    name,
 			Status:  Warn,
-			Detail:  "claustro.yaml not found",
-			FixHint: "Not required — uses defaults",
+			Detail:  "no claustro.yaml found (optional)",
+			FixHint: "run: claustro init",
+		}
+	}
+
+	cfg, err := config.LoadRaw(dir)
+	if err != nil {
+		return CheckResult{
+			Name:    name,
+			Status:  Fail,
+			Detail:  fmt.Sprintf("failed to parse claustro.yaml: %v", err),
+			FixHint: "Fix the YAML syntax errors in claustro.yaml",
+		}
+	}
+
+	results := cfg.Validate()
+	errs := cfg.Errors(results)
+	warns := cfg.Warnings(results)
+
+	if len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = fmt.Sprintf("%s: %s", e.Field, e.Message)
+		}
+		return CheckResult{
+			Name:    name,
+			Status:  Fail,
+			Detail:  strings.Join(msgs, "; "),
+			FixHint: "Fix the errors in claustro.yaml",
+		}
+	}
+
+	if len(warns) > 0 {
+		msgs := make([]string, len(warns))
+		for i, w := range warns {
+			msgs[i] = fmt.Sprintf("%s: %s", w.Field, w.Message)
+		}
+		return CheckResult{
+			Name:    name,
+			Status:  Warn,
+			Detail:  strings.Join(msgs, "; "),
+			FixHint: "Review warnings in claustro.yaml",
 		}
 	}
 

@@ -191,7 +191,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		}
 		opts.ImageName = image.ExtImageName(id.Project)
 	} else {
-		if err := image.EnsureBuilt(ctx, cli, os.Stdout); err != nil {
+		if err := image.EnsureBuilt(ctx, cli, &cfg.ImageBuild, os.Stdout); err != nil {
 			return nil, false, fmt.Errorf("building image: %w", err)
 		}
 	}

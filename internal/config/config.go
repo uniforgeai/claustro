@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	// Parsed image fields (populated by postProcess).
 	ImageName   string
 	ImageConfig ImageConfig
+	ImageBuild  ImageBuildConfig `yaml:"-"`
 }
 
 // DefaultsConfig holds project-wide sandbox defaults.
@@ -117,6 +119,35 @@ func Load(projectPath string) (*Config, error) {
 	if err := cfg.postProcess(); err != nil {
 		return nil, fmt.Errorf("parsing claustro.yaml image field: %w", err)
 	}
+	results := cfg.Validate()
+	if errs := cfg.Errors(results); len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = fmt.Sprintf("%s: %s", e.Field, e.Message)
+		}
+		return nil, fmt.Errorf("invalid claustro.yaml: %s", strings.Join(msgs, "; "))
+	}
+	return &cfg, nil
+}
+
+// LoadRaw reads claustro.yaml from projectPath and returns the parsed Config
+// without running validation. Returns nil (no error) if the file is missing.
+func LoadRaw(projectPath string) (*Config, error) {
+	path := filepath.Join(projectPath, "claustro.yaml")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading config: %w", err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	if err := cfg.postProcess(); err != nil {
+		return nil, fmt.Errorf("processing config: %w", err)
+	}
 	return &cfg, nil
 }
 
@@ -133,6 +164,9 @@ func (c *Config) postProcess() error {
 	case yaml.MappingNode:
 		if err := c.RawImage.Decode(&c.ImageConfig); err != nil {
 			return fmt.Errorf("decoding image config: %w", err)
+		}
+		if err := c.RawImage.Decode(&c.ImageBuild); err != nil {
+			return fmt.Errorf("decoding image build config: %w", err)
 		}
 	default:
 		return fmt.Errorf("image field must be a string or mapping, got %v", c.RawImage.Kind)

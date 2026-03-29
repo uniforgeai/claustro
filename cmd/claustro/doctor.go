@@ -78,9 +78,9 @@ func runDoctor(ctx context.Context) error {
 
 	for _, r := range results {
 		indicator := statusIndicator(r.Status, colorEnabled)
-		fmt.Fprintf(os.Stdout, "  %-16s  %s  %s\n", r.Name, indicator, r.Detail)
+		_, _ = fmt.Fprintf(os.Stdout, "  %-16s  %s  %s\n", r.Name, indicator, r.Detail)
 		if r.FixHint != "" && (r.Status == doctor.Fail || r.Status == doctor.Warn) {
-			fmt.Fprintf(os.Stdout, "                      %s\n", r.FixHint)
+			_, _ = fmt.Fprintf(os.Stdout, "                      %s\n", r.FixHint)
 		}
 		if r.Status == doctor.Skip {
 			continue
@@ -95,7 +95,7 @@ func runDoctor(ctx context.Context) error {
 	}
 
 	issues := total - passed
-	fmt.Fprintf(os.Stdout, "\n%d/%d checks passed. %d issues found.\n", passed, total, issues)
+	_, _ = fmt.Fprintf(os.Stdout, "\n%d/%d checks passed. %d issues found.\n", passed, total, issues)
 
 	if hasFail {
 		return fmt.Errorf("%d check(s) failed", issues)

@@ -1,0 +1,12 @@
+baseURL = "https://uniforgeai.github.io/claustro/"
+title = "claustro"
+theme = "hugo-book"
+
+[params]
+  BookToC = true
+  BookSection = "/"
+  BookMenuBundle = "/menu"
+  BookRepo = "https://github.com/uniforgeai/claustro"
+
+[markup.goldmark.renderer]
+  unsafe = true

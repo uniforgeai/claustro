@@ -8,6 +8,7 @@ import (
 
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
 )
@@ -99,7 +100,8 @@ func RebuildRestart(ctx context.Context, cli *client.Client, project string, w i
 		}
 	}
 
-	if err := image.Build(ctx, cli, w); err != nil {
+	defaultImgCfg := config.DefaultImageBuildConfig()
+	if err := image.Build(ctx, cli, &defaultImgCfg, w); err != nil {
 		return fmt.Errorf("rebuilding image: %w", err)
 	}
 
