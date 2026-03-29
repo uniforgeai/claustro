@@ -2,6 +2,7 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -28,6 +29,9 @@ type CreateOptions struct {
 	// ImageName overrides the default claustro:latest image.
 	// If empty, image.ImageName is used.
 	ImageName string
+	// Firewall enables egress firewall. When true, the container is granted
+	// NET_ADMIN capability so that iptables rules can be applied after start.
+	Firewall bool
 }
 
 // Create creates (but does not start) a sandbox container.
@@ -67,6 +71,9 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 			NanoCPUs: 4_000_000_000,
 			Memory:   8 * 1024 * 1024 * 1024,
 		},
+	}
+	if opts.Firewall {
+		hostCfg.CapAdd = []string{"NET_ADMIN"}
 	}
 
 	netCfg := &networktypes.NetworkingConfig{
@@ -239,6 +246,23 @@ func ListByProject(ctx context.Context, cli *client.Client, project string, allP
 	return containers, nil
 }
 
+// ListMCPSiblings returns all MCP SSE sibling containers for the given sandbox identity.
+func ListMCPSiblings(ctx context.Context, cli *client.Client, id *identity.Identity) ([]containertypes.Summary, error) {
+	args := filters.NewArgs(
+		filters.Arg("label", "claustro.project="+id.Project),
+		filters.Arg("label", "claustro.name="+id.Name),
+		filters.Arg("label", "claustro.role=mcp-sse"),
+	)
+	containers, err := cli.ContainerList(ctx, containertypes.ListOptions{
+		All:     true,
+		Filters: args,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing MCP siblings: %w", err)
+	}
+	return containers, nil
+}
+
 // Inspect returns detailed information about a container.
 func Inspect(ctx context.Context, cli *client.Client, containerID string) (containertypes.InspectResponse, error) {
 	info, err := cli.ContainerInspect(ctx, containerID)
@@ -311,6 +335,41 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 	})
 	if err != nil {
 		return fmt.Errorf("creating network: %w", err)
+	}
+	return nil
+}
+
+// ExecSimple runs a non-interactive command inside a running container and returns any error.
+// It captures stdout/stderr but does not stream them.
+func ExecSimple(ctx context.Context, cli *client.Client, containerID string, cmd []string) error {
+	execCfg := containertypes.ExecOptions{
+		Cmd:          cmd,
+		User:         "sandbox",
+		Tty:          false,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
+	if err != nil {
+		return fmt.Errorf("creating exec: %w", err)
+	}
+
+	resp, err := cli.ContainerExecAttach(ctx, execID.ID, containertypes.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("attaching to exec: %w", err)
+	}
+	defer resp.Close()
+
+	var output bytes.Buffer
+	io.Copy(&output, resp.Reader) //nolint:errcheck
+
+	inspect, err := cli.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("inspecting exec: %w", err)
+	}
+	if inspect.ExitCode != 0 {
+		return fmt.Errorf("command %v exited %d: %s", cmd, inspect.ExitCode, output.String())
 	}
 	return nil
 }

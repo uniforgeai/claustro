@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \
+    iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js LTS
@@ -53,6 +54,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN npm install -g @anthropic-ai/claude-code \
     && mkdir -p /home/sandbox/.local/bin \
     && ln -sf "$(which claude)" /home/sandbox/.local/bin/claude
+
+# Install MCP servers (filesystem, memory, fetch)
+RUN npm install -g \
+    @anthropic-ai/mcp-server-filesystem \
+    @anthropic-ai/mcp-server-memory \
+    @anthropic-ai/mcp-server-fetch
 
 # Install ccstatusline (optional — native build may fail on some architectures)
 RUN npm install -g ccstatusline || true
