@@ -240,6 +240,37 @@ image:
 	assert.Equal(t, "apt-get install -y curl", cfg.ImageConfig.Extra[0].Run)
 }
 
+func TestLoad_ValidationErrors(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+defaults:
+  resources:
+    cpus: "not-a-number"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	_, err = Load(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid claustro.yaml")
+	assert.Contains(t, err.Error(), "defaults.resources.cpus")
+}
+
+func TestLoad_ValidationWarnings_DoNotBlock(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+defaults:
+  resources:
+    cpus: "0"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	cfg, err := Load(dir)
+	require.NoError(t, err, "cpus=0 should produce a warning, not block load")
+	assert.Equal(t, "0", cfg.Defaults.Resources.CPUs)
+}
+
 func TestLoad_GitOnly(t *testing.T) {
 	dir := t.TempDir()
 	content := `

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	// Parsed image fields (populated by postProcess).
 	ImageName   string
 	ImageConfig ImageConfig
+	ImageBuild  ImageBuildConfig `yaml:"-"`
 }
 
 // DefaultsConfig holds project-wide sandbox defaults.
@@ -117,6 +119,14 @@ func Load(projectPath string) (*Config, error) {
 	if err := cfg.postProcess(); err != nil {
 		return nil, fmt.Errorf("parsing claustro.yaml image field: %w", err)
 	}
+	results := cfg.Validate()
+	if errs := cfg.Errors(results); len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = fmt.Sprintf("%s: %s", e.Field, e.Message)
+		}
+		return nil, fmt.Errorf("invalid claustro.yaml: %s", strings.Join(msgs, "; "))
+	}
 	return &cfg, nil
 }
 
@@ -133,6 +143,9 @@ func (c *Config) postProcess() error {
 	case yaml.MappingNode:
 		if err := c.RawImage.Decode(&c.ImageConfig); err != nil {
 			return fmt.Errorf("decoding image config: %w", err)
+		}
+		if err := c.RawImage.Decode(&c.ImageBuild); err != nil {
+			return fmt.Errorf("decoding image build config: %w", err)
 		}
 	default:
 		return fmt.Errorf("image field must be a string or mapping, got %v", c.RawImage.Kind)
