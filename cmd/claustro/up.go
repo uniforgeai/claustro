@@ -13,8 +13,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
+	"github.com/uniforgeai/claustro/internal/firewall"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
+	"github.com/uniforgeai/claustro/internal/mcp"
 	internalMount "github.com/uniforgeai/claustro/internal/mount"
 )
 
@@ -25,6 +27,7 @@ func newUpCmd() *cobra.Command {
 		mounts        []string
 		envs          []string
 		readOnly      bool
+		firewall      bool
 		isolatedState bool
 	)
 	cmd := &cobra.Command{
@@ -37,12 +40,17 @@ func newUpCmd() *cobra.Command {
 			if cmd.Flags().Changed("readonly") {
 				readOnlyPtr = &readOnly
 			}
+			var firewallPtr *bool
+			if cmd.Flags().Changed("firewall") {
+				firewallPtr = &firewall
+			}
 			return runUp(cmd.Context(), name, config.CLIOverrides{
 				Name:          name,
 				Workdir:       workdir,
 				Mounts:        mounts,
 				Env:           cliEnv,
 				ReadOnly:      readOnlyPtr,
+				Firewall:      firewallPtr,
 				IsolatedState: isolatedState,
 			})
 		},
@@ -52,6 +60,7 @@ func newUpCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&mounts, "mount", nil, `Additional bind mount (host:container[:ro|rw])`)
 	cmd.Flags().StringSliceVar(&envs, "env", nil, `Environment variable (KEY=VALUE)`)
 	cmd.Flags().BoolVar(&readOnly, "readonly", false, `Mount source directory as read-only`)
+	cmd.Flags().BoolVar(&firewall, "firewall", false, `Enable egress firewall (restrict outbound traffic to allowlist)`)
 	cmd.Flags().BoolVar(&isolatedState, "isolated-state", false, `Use a Docker volume for Claude state instead of bind-mounting ~/.claude`)
 	return cmd
 }
@@ -174,6 +183,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	)
 
 	var opts container.CreateOptions
+	opts.Firewall = resolved.Firewall
 	if len(cfg.ImageConfig.Extra) > 0 {
 		steps := extraRunSteps(cfg.ImageConfig.Extra)
 		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
@@ -234,7 +244,57 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		return nil, false, fmt.Errorf("starting container: %w", err)
 	}
 
+	// Write MCP config into the container.
+	if err := writeMCPConfig(ctx, cli, containerID, cfg, resolved.IsolatedState); err != nil {
+		slog.Warn("failed to write MCP config", "err", err)
+	}
+
+	// Apply egress firewall rules if enabled.
+	if resolved.Firewall {
+		slog.Info("applying egress firewall", "container", id.ContainerName())
+		if err := firewall.Apply(ctx, cli, containerID, cfg.Firewall.Allow); err != nil {
+			// Firewall failure is fatal — stop and remove the container.
+			_ = container.Stop(ctx, cli, containerID)
+			_ = container.Remove(ctx, cli, containerID)
+			return nil, false, fmt.Errorf("applying firewall: %w", err)
+		}
+	}
+
 	return id, false, nil
+}
+
+// writeMCPConfig builds the merged MCP config and writes it into the container.
+func writeMCPConfig(ctx context.Context, cli *client.Client, containerID string, cfg *config.Config, isolatedState bool) error {
+	mcpCfg := mcp.DefaultConfig()
+
+	// When bind-mounted, read existing host mcp.json and merge it.
+	if !isolatedState {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			hostMCPPath := filepath.Join(home, ".claude", "mcp.json")
+			if data, err := os.ReadFile(hostMCPPath); err == nil {
+				hostCfg, err := mcp.ParseJSON(data)
+				if err != nil {
+					slog.Warn("could not parse host mcp.json, using defaults only", "err", err)
+				} else {
+					mcpCfg = mcp.Merge(mcpCfg, hostCfg)
+				}
+			}
+		}
+	}
+
+	// Merge project-level MCP stdio overrides.
+	if len(cfg.MCP.Stdio) > 0 {
+		projectCfg := mcp.FromProjectConfig(cfg.MCP.Stdio)
+		mcpCfg = mcp.Merge(mcpCfg, projectCfg)
+	}
+
+	cmd, err := mcp.WriteCommand(mcpCfg, mcp.MCPConfigPath)
+	if err != nil {
+		return fmt.Errorf("building mcp write command: %w", err)
+	}
+
+	return container.ExecSimple(ctx, cli, containerID, cmd)
 }
 
 // extraRunSteps extracts the Run strings from a slice of ExtraStep.
