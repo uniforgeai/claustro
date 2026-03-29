@@ -147,6 +147,54 @@ func TestResolve_ReadOnlyCLINil_UsesDefault(t *testing.T) {
 	assert.True(t, sc.ReadOnly, "config default readonly should apply when CLI flag is nil")
 }
 
+func TestResolve_FirewallCLIOverride(t *testing.T) {
+	fw := true
+	cfg := &Config{
+		Defaults: DefaultsConfig{Firewall: boolPtr(false)},
+	}
+	cli := CLIOverrides{
+		Name:     "test",
+		Firewall: &fw,
+	}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.Firewall, "CLI --firewall should override config default")
+}
+
+func TestResolve_FirewallCLINil_UsesDefault(t *testing.T) {
+	cfg := &Config{
+		Defaults: DefaultsConfig{Firewall: boolPtr(true)},
+	}
+	cli := CLIOverrides{Name: "test"}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.Firewall, "config default firewall should apply when CLI flag is nil")
+}
+
+func TestResolve_FirewallConfigEnabled(t *testing.T) {
+	cfg := &Config{
+		Firewall: FirewallConfig{Enabled: boolPtr(true)},
+	}
+	cli := CLIOverrides{Name: "test"}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.True(t, sc.Firewall, "firewall.enabled in config should enable firewall")
+}
+
+func TestResolve_FirewallConfigEnabledOverriddenByCLI(t *testing.T) {
+	fw := false
+	cfg := &Config{
+		Firewall: FirewallConfig{Enabled: boolPtr(true)},
+	}
+	cli := CLIOverrides{
+		Name:     "test",
+		Firewall: &fw,
+	}
+	sc, err := cfg.Resolve("/project", cli, nil)
+	require.NoError(t, err)
+	assert.False(t, sc.Firewall, "CLI --firewall=false should override config firewall.enabled")
+}
+
 func TestResolve_IsolatedStateCLIOverride(t *testing.T) {
 	cfg := &Config{}
 	cli := CLIOverrides{
