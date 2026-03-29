@@ -65,6 +65,7 @@ type MCPStdio struct {
 // MCPSSE is an SSE-based MCP server running as a sibling container.
 type MCPSSE struct {
 	Image string            `yaml:"image"`
+	Port  int               `yaml:"port"`
 	Env   map[string]string `yaml:"env"`
 }
 

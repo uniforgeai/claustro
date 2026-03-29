@@ -152,6 +152,33 @@ func TestProjectVolumeName(t *testing.T) {
 	}
 }
 
+func TestIdentity_MCPContainerName(t *testing.T) {
+	id := &Identity{Project: "myapp", Name: "brave-fox"}
+	tests := []struct {
+		server string
+		want   string
+	}{
+		{"postgres", "claustro-myapp_brave-fox_mcp-postgres"},
+		{"browser", "claustro-myapp_brave-fox_mcp-browser"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.server, func(t *testing.T) {
+			assert.Equal(t, tt.want, id.MCPContainerName(tt.server))
+		})
+	}
+}
+
+func TestIdentity_MCPLabels(t *testing.T) {
+	id := &Identity{Project: "myapp", Name: "brave-fox"}
+	labels := id.MCPLabels("postgres")
+
+	assert.Equal(t, "true", labels["claustro.managed"])
+	assert.Equal(t, "myapp", labels["claustro.project"])
+	assert.Equal(t, "brave-fox", labels["claustro.name"])
+	assert.Equal(t, "mcp-sse", labels["claustro.role"])
+	assert.Equal(t, "postgres", labels["claustro.mcp-server"])
+}
+
 func TestIdentity_Labels(t *testing.T) {
 	id := &Identity{Project: "my-saas", Name: "backend"}
 	labels := id.Labels()

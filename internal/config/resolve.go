@@ -24,6 +24,7 @@ type CLIOverrides struct {
 	Mounts        []string
 	Env           map[string]string
 	ReadOnly      *bool
+	Firewall      *bool
 	IsolatedState bool
 }
 
@@ -39,6 +40,9 @@ func (c *Config) Resolve(projectRoot string, cli CLIOverrides, dotenv map[string
 	// Apply config defaults.
 	if c.Defaults.Firewall != nil {
 		sc.Firewall = *c.Defaults.Firewall
+	}
+	if c.Firewall.Enabled != nil {
+		sc.Firewall = *c.Firewall.Enabled
 	}
 	if c.Defaults.ReadOnly != nil {
 		sc.ReadOnly = *c.Defaults.ReadOnly
@@ -95,6 +99,10 @@ func (c *Config) Resolve(projectRoot string, cli CLIOverrides, dotenv map[string
 	// CLI readonly override.
 	if cli.ReadOnly != nil {
 		sc.ReadOnly = *cli.ReadOnly
+	}
+	// CLI firewall override.
+	if cli.Firewall != nil {
+		sc.Firewall = *cli.Firewall
 	}
 	sc.IsolatedState = cli.IsolatedState
 

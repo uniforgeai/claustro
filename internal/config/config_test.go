@@ -184,6 +184,33 @@ git:
 	assert.False(t, cfg.Git.IsMountGhConfig())
 }
 
+func TestLoad_MCPSSEPort(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+mcp:
+  sse:
+    postgres:
+      image: crystaldba/postgres-mcp-server:latest
+      port: 8000
+      env:
+        DATABASE_URI: postgresql://localhost/db
+    browser:
+      image: example/browser-mcp:latest
+      port: 3000
+    noport:
+      image: example/noport:latest
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644))
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+
+	assert.Equal(t, 8000, cfg.MCP.SSE["postgres"].Port)
+	assert.Equal(t, 3000, cfg.MCP.SSE["browser"].Port)
+	assert.Equal(t, 0, cfg.MCP.SSE["noport"].Port) // zero means "use default at runtime"
+	assert.Equal(t, "crystaldba/postgres-mcp-server:latest", cfg.MCP.SSE["postgres"].Image)
+	assert.Equal(t, "postgresql://localhost/db", cfg.MCP.SSE["postgres"].Env["DATABASE_URI"])
+}
+
 func TestLoad_ImageScalarString(t *testing.T) {
 	dir := t.TempDir()
 	content := `image: my-custom-image:v2`
