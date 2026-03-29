@@ -117,3 +117,46 @@ func TestCheckGitHubCLI(t *testing.T) {
 	assert.Equal(t, "GitHub CLI", result.Name)
 	assert.Contains(t, []CheckStatus{Pass, Warn, Fail, Skip}, result.Status)
 }
+
+func TestCheckConfigFile_InvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `defaults:
+  resources:
+    cpus: "not-a-number"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(yaml), 0o644)
+	require.NoError(t, err)
+
+	result := CheckConfigFile(dir)
+	assert.Equal(t, "Config File", result.Name)
+	assert.Equal(t, Fail, result.Status)
+}
+
+func TestCheckConfigFile_WarningsOnly(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `defaults:
+  resources:
+    cpus: "0"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(yaml), 0o644)
+	require.NoError(t, err)
+
+	result := CheckConfigFile(dir)
+	assert.Equal(t, "Config File", result.Name)
+	assert.Equal(t, Warn, result.Status)
+}
+
+func TestCheckConfigFile_ValidConfig(t *testing.T) {
+	dir := t.TempDir()
+	yaml := `defaults:
+  resources:
+    cpus: "4"
+    memory: "8G"
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(yaml), 0o644)
+	require.NoError(t, err)
+
+	result := CheckConfigFile(dir)
+	assert.Equal(t, "Config File", result.Name)
+	assert.Equal(t, Pass, result.Status)
+}

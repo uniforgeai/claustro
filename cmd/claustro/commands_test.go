@@ -27,7 +27,7 @@ func findSubcmd(root *cobra.Command, name string) *cobra.Command {
 
 func TestSetupCommands_RegistersAllCommands(t *testing.T) {
 	root := makeRoot()
-	expected := []string{"burn", "claude", "exec", "logs", "ls", "nuke", "rebuild", "shell", "status", "up"}
+	expected := []string{"burn", "claude", "config", "doctor", "exec", "init", "logs", "ls", "nuke", "rebuild", "shell", "status", "up", "validate"}
 	for _, name := range expected {
 		t.Run(name, func(t *testing.T) {
 			cmd := findSubcmd(root, name)
@@ -169,4 +169,41 @@ func TestRebuildCmd_Defaults(t *testing.T) {
 	f := cmd.Flags().Lookup("restart")
 	assert.NotNil(t, f)
 	assert.Equal(t, "false", f.DefValue)
+}
+
+func TestValidateCmd_Exists(t *testing.T) {
+	cmd := newValidateCmd()
+	assert.Equal(t, "validate", cmd.Name())
+}
+
+func TestInitCmd_Defaults(t *testing.T) {
+	cmd := newInitCmd()
+	assert.Equal(t, "init", cmd.Name())
+
+	flags := []string{"project", "languages", "tools", "mcp", "cpus", "memory", "firewall", "readonly", "yes"}
+	for _, name := range flags {
+		t.Run(name, func(t *testing.T) {
+			f := cmd.Flags().Lookup(name)
+			assert.NotNil(t, f, "flag %q should exist", name)
+		})
+	}
+}
+
+func TestConfigCmd_HasSubcommands(t *testing.T) {
+	cmd := newConfigCmd()
+	assert.Equal(t, "config", cmd.Name())
+
+	subs := []string{"get", "set", "languages", "tools", "mcp", "defaults", "firewall", "git"}
+	for _, name := range subs {
+		t.Run(name, func(t *testing.T) {
+			found := false
+			for _, sub := range cmd.Commands() {
+				if sub.Name() == name {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "subcommand %q should exist", name)
+		})
+	}
 }

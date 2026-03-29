@@ -3,6 +3,7 @@ package main
 import "github.com/spf13/cobra"
 
 func setupCommands(root *cobra.Command) {
+	root.AddCommand(newInitCmd())
 	root.AddCommand(newUpCmd())
 	root.AddCommand(newBurnCmd())
 	root.AddCommand(newShellCmd())
@@ -14,4 +15,6 @@ func setupCommands(root *cobra.Command) {
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newLogsCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newValidateCmd())
+	root.AddCommand(newConfigCmd())
 }
