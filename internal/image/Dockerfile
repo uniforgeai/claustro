@@ -50,10 +50,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code globally
-RUN npm install -g @anthropic-ai/claude-code \
-    && mkdir -p /home/sandbox/.local/bin \
-    && ln -sf "$(which claude)" /home/sandbox/.local/bin/claude
+# Install Claude Code globally via npm (single installation method).
+# Do NOT symlink to ~/.local/bin — that would create a second "native" installation
+# that conflicts with the npm-global one and breaks auto-update detection.
+RUN npm install -g @anthropic-ai/claude-code
 
 # Install MCP servers (filesystem, memory, fetch)
 RUN npm install -g \
@@ -63,6 +63,11 @@ RUN npm install -g \
 
 # Install ccstatusline (optional — native build may fail on some architectures)
 RUN npm install -g ccstatusline || true
+
+# Install gopls (Go language server for LSP support in Claude Code)
+RUN GOPATH=/tmp/gopls-build go install golang.org/x/tools/gopls@latest \
+    && mv /tmp/gopls-build/bin/gopls /usr/local/bin/gopls \
+    && rm -rf /tmp/gopls-build
 
 # Install clipboard shims (xclip and wl-paste) that bridge to the host clipboard
 # via the claustro Unix socket mounted at /run/claustro/clipboard.sock.
@@ -85,6 +90,11 @@ RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
     && cp -r /root/.cargo /home/sandbox/.cargo \
     && cp -r /root/.rustup /home/sandbox/.rustup \
     && chown -R sandbox:sandbox /home/sandbox
+
+# Allow sandbox user to update npm global packages (Claude Code auto-updates).
+# npm global prefix is /usr/lib (node_modules) + /usr/bin (binaries).
+RUN chown -R sandbox:sandbox /usr/lib/node_modules \
+    && chown sandbox:sandbox /usr/bin/claude /usr/bin/npx /usr/bin/npm 2>/dev/null || true
 
 ENV HOME=/home/sandbox
 ENV PATH="/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
