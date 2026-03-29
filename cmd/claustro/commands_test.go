@@ -170,3 +170,8 @@ func TestRebuildCmd_Defaults(t *testing.T) {
 	assert.NotNil(t, f)
 	assert.Equal(t, "false", f.DefValue)
 }
+
+func TestValidateCmd_Exists(t *testing.T) {
+	cmd := newValidateCmd()
+	assert.Equal(t, "validate", cmd.Name())
+}

@@ -130,6 +130,27 @@ func Load(projectPath string) (*Config, error) {
 	return &cfg, nil
 }
 
+// LoadRaw reads claustro.yaml from projectPath and returns the parsed Config
+// without running validation. Returns nil (no error) if the file is missing.
+func LoadRaw(projectPath string) (*Config, error) {
+	path := filepath.Join(projectPath, "claustro.yaml")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading config: %w", err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	if err := cfg.postProcess(); err != nil {
+		return nil, fmt.Errorf("processing config: %w", err)
+	}
+	return &cfg, nil
+}
+
 // postProcess handles the dual image: syntax.
 // "image: name:tag" (scalar) sets ImageName.
 // "image:\n  extra: [...]" (mapping) sets ImageConfig.

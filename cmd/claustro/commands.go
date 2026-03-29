@@ -14,4 +14,5 @@ func setupCommands(root *cobra.Command) {
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newLogsCmd())
 	root.AddCommand(newDoctorCmd())
+	root.AddCommand(newValidateCmd())
 }
