@@ -128,7 +128,7 @@ mcp:
   stdio:
     filesystem:
       command: npx
-      args: ["-y", "@anthropic-ai/mcp-server-filesystem", "/workspace"]
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
   sse:
     postgres:
       image: crystaldba/postgres-mcp-server:latest
@@ -173,7 +173,7 @@ git:
 
 	require.Contains(t, cfg.MCP.Stdio, "filesystem")
 	assert.Equal(t, "npx", cfg.MCP.Stdio["filesystem"].Command)
-	assert.Equal(t, []string{"-y", "@anthropic-ai/mcp-server-filesystem", "/workspace"}, cfg.MCP.Stdio["filesystem"].Args)
+	assert.Equal(t, []string{"-y", "@modelcontextprotocol/server-filesystem", "/workspace"}, cfg.MCP.Stdio["filesystem"].Args)
 
 	require.Contains(t, cfg.MCP.SSE, "postgres")
 	assert.Equal(t, "crystaldba/postgres-mcp-server:latest", cfg.MCP.SSE["postgres"].Image)

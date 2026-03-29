@@ -55,11 +55,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # that conflicts with the npm-global one and breaks auto-update detection.
 RUN npm install -g @anthropic-ai/claude-code
 
-# Install MCP servers (filesystem, memory, fetch)
+# Install MCP servers (filesystem, memory)
 RUN npm install -g \
-    @anthropic-ai/mcp-server-filesystem \
-    @anthropic-ai/mcp-server-memory \
-    @anthropic-ai/mcp-server-fetch
+    @modelcontextprotocol/server-filesystem \
+    @modelcontextprotocol/server-memory
+
+# Install MCP fetch server (Python-based)
+RUN pip3 install --break-system-packages mcp-server-fetch
 
 # Install ccstatusline (optional — native build may fail on some architectures)
 RUN npm install -g ccstatusline || true

@@ -42,15 +42,15 @@ func DefaultConfig() Config {
 		MCPServers: map[string]ServerEntry{
 			"filesystem": {
 				Command: "npx",
-				Args:    []string{"-y", "@anthropic-ai/mcp-server-filesystem", "/workspace"},
+				Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/workspace"},
 			},
 			"memory": {
 				Command: "npx",
-				Args:    []string{"-y", "@anthropic-ai/mcp-server-memory"},
+				Args:    []string{"-y", "@modelcontextprotocol/server-memory"},
 			},
 			"fetch": {
-				Command: "npx",
-				Args:    []string{"-y", "@anthropic-ai/mcp-server-fetch"},
+				Command: "mcp-server-fetch",
+				Args:    nil,
 			},
 		},
 	}
