@@ -246,6 +246,23 @@ func ListByProject(ctx context.Context, cli *client.Client, project string, allP
 	return containers, nil
 }
 
+// ListMCPSiblings returns all MCP SSE sibling containers for the given sandbox identity.
+func ListMCPSiblings(ctx context.Context, cli *client.Client, id *identity.Identity) ([]containertypes.Summary, error) {
+	args := filters.NewArgs(
+		filters.Arg("label", "claustro.project="+id.Project),
+		filters.Arg("label", "claustro.name="+id.Name),
+		filters.Arg("label", "claustro.role=mcp-sse"),
+	)
+	containers, err := cli.ContainerList(ctx, containertypes.ListOptions{
+		All:     true,
+		Filters: args,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing MCP siblings: %w", err)
+	}
+	return containers, nil
+}
+
 // Inspect returns detailed information about a container.
 func Inspect(ctx context.Context, cli *client.Client, containerID string) (containertypes.InspectResponse, error) {
 	info, err := cli.ContainerInspect(ctx, containerID)

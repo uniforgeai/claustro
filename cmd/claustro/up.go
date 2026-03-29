@@ -244,6 +244,11 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		return nil, false, fmt.Errorf("starting container: %w", err)
 	}
 
+	// Start MCP SSE sibling containers (non-fatal on failure).
+	if len(cfg.MCP.SSE) > 0 {
+		mcp.StartSSESiblings(ctx, cli, id, cfg.MCP.SSE)
+	}
+
 	// Write MCP config into the container.
 	if err := writeMCPConfig(ctx, cli, containerID, cfg, resolved.IsolatedState); err != nil {
 		slog.Warn("failed to write MCP config", "err", err)
@@ -287,6 +292,12 @@ func writeMCPConfig(ctx context.Context, cli *client.Client, containerID string,
 	if len(cfg.MCP.Stdio) > 0 {
 		projectCfg := mcp.FromProjectConfig(cfg.MCP.Stdio)
 		mcpCfg = mcp.Merge(mcpCfg, projectCfg)
+	}
+
+	// Merge SSE MCP endpoint entries.
+	if len(cfg.MCP.SSE) > 0 {
+		sseCfg := mcp.SSEEntries(cfg.MCP.SSE)
+		mcpCfg = mcp.Merge(mcpCfg, sseCfg)
 	}
 
 	cmd, err := mcp.WriteCommand(mcpCfg, mcp.MCPConfigPath)

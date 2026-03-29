@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
+	"github.com/uniforgeai/claustro/internal/mcp"
 )
 
 func newBurnCmd() *cobra.Command {
@@ -52,7 +54,26 @@ func runBurn(ctx context.Context, name string, all bool) error {
 			fmt.Printf("No sandboxes for project %q — nothing to burn.\n", tmpID.Project)
 			return nil
 		}
+		// Partition: remove MCP siblings first, then sandboxes.
+		var siblings, sandboxes []containertypes.Summary
 		for _, c := range containers {
+			if c.Labels["claustro.role"] == "mcp-sse" {
+				siblings = append(siblings, c)
+			} else {
+				sandboxes = append(sandboxes, c)
+			}
+		}
+		for _, c := range siblings {
+			cName := strings.TrimPrefix(c.Names[0], "/")
+			fmt.Printf("Removing MCP sibling %s...\n", cName)
+			if err := container.Stop(ctx, cli, c.ID); err != nil {
+				fmt.Printf("(stop: %v — continuing)\n", err)
+			}
+			if err := container.Remove(ctx, cli, c.ID); err != nil {
+				fmt.Printf("error removing %s: %v\n", cName, err)
+			}
+		}
+		for _, c := range sandboxes {
 			cName := strings.TrimPrefix(c.Names[0], "/")
 			fmt.Printf("Burning sandbox %s...\n", cName)
 			if err := container.Stop(ctx, cli, c.ID); err != nil {
@@ -85,6 +106,9 @@ func runBurn(ctx context.Context, name string, all bool) error {
 		fmt.Printf("No sandbox %q found — nothing to burn.\n", id.ContainerName())
 		return nil
 	}
+
+	// Clean up MCP SSE siblings before the sandbox.
+	mcp.StopSSESiblings(ctx, cli, id)
 
 	fmt.Printf("Burning sandbox %s...\n", id.ContainerName())
 	if err := container.Stop(ctx, cli, c.ID); err != nil {

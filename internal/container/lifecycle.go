@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
@@ -29,7 +30,28 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 		return nil
 	}
 
+	// Partition: remove MCP siblings first, then sandboxes.
+	var siblings, sandboxes []containertypes.Summary
 	for _, c := range containers {
+		if c.Labels["claustro.role"] == "mcp-sse" {
+			siblings = append(siblings, c)
+		} else {
+			sandboxes = append(sandboxes, c)
+		}
+	}
+
+	for _, c := range siblings {
+		name := strings.TrimPrefix(c.Names[0], "/")
+		fmt.Fprintf(w, "Removing MCP sibling %s...\n", name) //nolint:errcheck
+		if err := Stop(ctx, cli, c.ID); err != nil {
+			fmt.Fprintf(w, "  (stop: %v — continuing)\n", err) //nolint:errcheck
+		}
+		if err := Remove(ctx, cli, c.ID); err != nil {
+			fmt.Fprintf(w, "  error removing: %v\n", err) //nolint:errcheck
+		}
+	}
+
+	for _, c := range sandboxes {
 		name := strings.TrimPrefix(c.Names[0], "/")
 		networkName := identity.NetworkNameFromLabels(c.Labels)
 		sandboxName := c.Labels["claustro.name"]

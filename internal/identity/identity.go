@@ -85,6 +85,21 @@ func ProjectVolumeName(project, purpose string) string {
 	return fmt.Sprintf("claustro-%s-%s", project, purpose)
 }
 
+// MCPContainerName returns the Docker container name for an MCP sibling server.
+// Format: claustro-{project}_{name}_mcp-{serverName}
+func (id *Identity) MCPContainerName(serverName string) string {
+	return fmt.Sprintf("claustro-%s_%s_mcp-%s", id.Project, id.Name, serverName)
+}
+
+// MCPLabels returns Docker labels for an MCP sibling container.
+// Includes the base sandbox labels plus MCP-specific role and server name.
+func (id *Identity) MCPLabels(serverName string) map[string]string {
+	labels := id.Labels()
+	labels["claustro.role"] = "mcp-sse"
+	labels["claustro.mcp-server"] = serverName
+	return labels
+}
+
 // Labels returns the Docker labels to apply to all resources for this sandbox.
 func (id *Identity) Labels() map[string]string {
 	return map[string]string{
