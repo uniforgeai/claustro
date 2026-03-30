@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# This file is licensed under the Business Source License 1.1. See the LICENSE file for details.
+# Copyright (c) 2026 Uniforge GmbH. All rights reserved.
+
 set -euo pipefail
 
 CONTAINER_NAME="claustro-poc"
