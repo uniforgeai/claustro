@@ -59,7 +59,9 @@ brews:
     repository:
       owner: uniforgeai
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      git:
+        url: "git@github.com:uniforgeai/homebrew-tap.git"
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     homepage: "https://github.com/uniforgeai/claustro"
     description: "Disposable Docker sandboxes for Claude Code"
     license: "MIT"
