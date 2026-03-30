@@ -1,3 +1,6 @@
+// This file is licensed under the Business Source License 1.1. See the LICENSE file for details.
+// Copyright (c) 2026 Uniforge GmbH. All rights reserved.
+
 // Package mcp builds and merges MCP server configurations for Claude Code sandboxes.
 package mcp
 

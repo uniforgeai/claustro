@@ -1,0 +1,23 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor: Uniforge GmbH
+
+Software: Claustro (including all source code, documentation, and assets provided in this repository)
+
+Change Date: March 30, 2030
+
+Change License: MIT License
+
+Additional Use Grant: Production use of the Software is permitted for any entity (including its affiliates) with annual revenue of less than 5,000,000 EUR. Notwithstanding the foregoing, any use of the Software to provide a managed or hosted service that competes with the Licensor's commercial offerings of the Software is strictly prohibited without a separate commercial license from the Licensor.
+
+License Grant. The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make available the Software, provided that you are not using the Software for commercial purposes beyond the Additional Use Grant.
+
+Effective Date. This License is effective on the date you receive the Software.
+
+Change. On the Change Date, or in the event of a Change of Control of the Licensor, this License shall convert to the Change License.
+
+Notice. You must include a copy of this License with any copy of the Software you distribute. You must also include the following notice in every source code file: "This file is licensed under the Business Source License 1.1. See the LICENSE file for details."
+
+Disclaimer. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

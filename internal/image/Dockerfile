@@ -1,3 +1,6 @@
+# This file is licensed under the Business Source License 1.1. See the LICENSE file for details.
+# Copyright (c) 2026 Uniforge GmbH. All rights reserved.
+
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive

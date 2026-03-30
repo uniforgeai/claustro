@@ -1,3 +1,6 @@
+// This file is licensed under the Business Source License 1.1. See the LICENSE file for details.
+// Copyright (c) 2026 Uniforge GmbH. All rights reserved.
+
 // Package clipboard provides an HTTP server that bridges the host clipboard
 // into claustro sandbox containers. On Linux it uses a Unix socket; on macOS
 // (where Docker containers run in a VM and cannot reach host Unix sockets) it
