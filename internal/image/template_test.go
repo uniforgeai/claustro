@@ -20,7 +20,7 @@ func TestRenderDockerfile_AllEnabled(t *testing.T) {
 	// Base always-present items
 	assert.Contains(t, out, "FROM ubuntu:24.04")
 	assert.Contains(t, out, "nodesource")
-	assert.Contains(t, out, "@anthropic-ai/claude-code")
+	assert.Contains(t, out, "claude.ai/install.sh")
 	assert.Contains(t, out, "claustro-init")
 	assert.Contains(t, out, "ccstatusline")
 	assert.Contains(t, out, "useradd")
@@ -73,7 +73,7 @@ func TestRenderDockerfile_MinimalConfig(t *testing.T) {
 	// Base items still present
 	assert.Contains(t, out, "FROM ubuntu:24.04")
 	assert.Contains(t, out, "nodesource")
-	assert.Contains(t, out, "@anthropic-ai/claude-code")
+	assert.Contains(t, out, "claude.ai/install.sh")
 	assert.Contains(t, out, "ccstatusline")
 	assert.Contains(t, out, "claustro-init")
 
