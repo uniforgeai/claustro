@@ -68,9 +68,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install MCP servers and ccstatusline as root (system-wide).
-RUN npm install -g ccstatusline || true
 {{if or .MCPFilesystem .MCPMemory}}
+# Install MCP servers (system-wide via npm)
 RUN npm install -g{{if .MCPFilesystem}} \
     @modelcontextprotocol/server-filesystem{{end}}{{if .MCPMemory}} \
     @modelcontextprotocol/server-memory{{end}}
@@ -78,6 +77,8 @@ RUN npm install -g{{if .MCPFilesystem}} \
 # Install MCP fetch server (Python-based)
 RUN pip3 install --break-system-packages mcp-server-fetch
 {{end}}
+# Install ccstatusline (optional — native build may fail on some architectures)
+RUN npm install -g ccstatusline || true
 {{if .Go}}
 # Install gopls (Go language server for LSP support in Claude Code)
 RUN GOPATH=/tmp/gopls-build go install golang.org/x/tools/gopls@latest \
@@ -106,24 +107,17 @@ RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
     && cp -r /root/.rustup /home/sandbox/.rustup \
     && chown -R sandbox:sandbox /home/sandbox
 {{end}}
-# Configure npm global prefix for sandbox user so auto-updates write to a
-# directory the sandbox user fully owns (creating/replacing symlinks in
-# /usr/bin requires ownership of the directory, not just the files).
-RUN mkdir -p /home/sandbox/.npm-global/bin /home/sandbox/.npm-global/lib \
-    && chown -R sandbox:sandbox /home/sandbox/.npm-global
+# Install Claude Code via native installer (recommended method).
+# Installs to ~/.local/bin/claude -> ~/.local/share/claude/versions/<ver>.
+# Native install auto-updates in the background — no npm or sudo needed.
+RUN su sandbox -c "curl -fsSL https://claude.ai/install.sh | sh"
 
 # Pre-create npm and pip cache dirs owned by sandbox
 RUN mkdir -p /home/sandbox/.npm /home/sandbox/.cache/pip \
     && chown -R sandbox:sandbox /home/sandbox/.npm /home/sandbox/.cache/pip
 
-# Set npm global prefix and install Claude Code as sandbox user.
-# Installing into the user prefix ensures claude is invoked from a writable
-# location so auto-update permission checks pass (doctor: "Update permissions: Yes").
-RUN su sandbox -c "npm config set prefix /home/sandbox/.npm-global" \
-    && su sandbox -c "npm install -g @anthropic-ai/claude-code"
-
 ENV HOME=/home/sandbox
-ENV PATH="/home/sandbox/.npm-global/bin:/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
+ENV PATH="/home/sandbox/.local/bin:/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /workspace
 
