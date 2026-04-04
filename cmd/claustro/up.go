@@ -187,6 +187,8 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 
 	var opts container.CreateOptions
 	opts.Firewall = resolved.Firewall
+	opts.CPUs = resolved.CPUs
+	opts.Memory = resolved.Memory
 	if len(cfg.ImageConfig.Extra) > 0 {
 		steps := extraRunSteps(cfg.ImageConfig.Extra)
 		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {

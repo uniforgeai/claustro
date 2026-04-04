@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
 	containertypes "github.com/docker/docker/api/types/container"
@@ -27,6 +29,12 @@ import (
 	claustromount "github.com/uniforgeai/claustro/internal/mount"
 )
 
+// Default resource limits applied when no config override is provided.
+const (
+	defaultNanoCPUs = 4_000_000_000          // 4 CPUs
+	defaultMemory   = 8 * 1024 * 1024 * 1024 // 8 GiB
+)
+
 // CreateOptions configures optional parameters for container creation.
 type CreateOptions struct {
 	// ImageName overrides the default claustro:latest image.
@@ -35,6 +43,12 @@ type CreateOptions struct {
 	// Firewall enables egress firewall. When true, the container is granted
 	// NET_ADMIN capability so that iptables rules can be applied after start.
 	Firewall bool
+	// CPUs is the number of CPUs to allocate (e.g. "2", "0.5").
+	// If empty, defaultNanoCPUs is used.
+	CPUs string
+	// Memory is the memory limit (e.g. "8G", "512M", "1024K").
+	// If empty, defaultMemory is used.
+	Memory string
 }
 
 // Create creates (but does not start) a sandbox container.
@@ -67,12 +81,21 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		AttachStderr: false,
 	}
 
+	nanoCPUs, err := parseNanoCPUs(opts.CPUs)
+	if err != nil {
+		return "", fmt.Errorf("parsing cpus %q: %w", opts.CPUs, err)
+	}
+	memBytes, err := parseMemory(opts.Memory)
+	if err != nil {
+		return "", fmt.Errorf("parsing memory %q: %w", opts.Memory, err)
+	}
+
 	hostCfg := &containertypes.HostConfig{
 		Mounts:      mounts,
 		SecurityOpt: []string{"no-new-privileges:true"},
 		Resources: containertypes.Resources{
-			NanoCPUs: 4_000_000_000,
-			Memory:   8 * 1024 * 1024 * 1024,
+			NanoCPUs: nanoCPUs,
+			Memory:   memBytes,
 		},
 	}
 	if opts.Firewall {
@@ -90,6 +113,53 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		return "", fmt.Errorf("creating container: %w", err)
 	}
 	return resp.ID, nil
+}
+
+// parseNanoCPUs converts a CPU string (e.g. "2", "0.5") to Docker NanoCPUs.
+// Returns defaultNanoCPUs if s is empty.
+func parseNanoCPUs(s string) (int64, error) {
+	if s == "" {
+		return defaultNanoCPUs, nil
+	}
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid cpu value: %w", err)
+	}
+	if val <= 0 {
+		return 0, fmt.Errorf("cpus must be positive, got %v", val)
+	}
+	return int64(val * 1e9), nil
+}
+
+// parseMemory converts a memory string (e.g. "8G", "512M", "1024K") to bytes.
+// Returns defaultMemory if s is empty.
+func parseMemory(s string) (int64, error) {
+	if s == "" {
+		return defaultMemory, nil
+	}
+	s = strings.TrimSpace(s)
+	if len(s) < 2 {
+		return 0, fmt.Errorf("invalid memory value %q", s)
+	}
+	suffix := strings.ToUpper(s[len(s)-1:])
+	numStr := s[:len(s)-1]
+	val, err := strconv.ParseInt(numStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid memory number %q: %w", numStr, err)
+	}
+	if val <= 0 {
+		return 0, fmt.Errorf("memory must be positive, got %v", val)
+	}
+	switch suffix {
+	case "K":
+		return val * 1024, nil
+	case "M":
+		return val * 1024 * 1024, nil
+	case "G":
+		return val * 1024 * 1024 * 1024, nil
+	default:
+		return 0, fmt.Errorf("unknown memory suffix %q, expected G, M, or K", suffix)
+	}
 }
 
 // Start starts an existing container.
