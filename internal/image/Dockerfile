@@ -96,13 +96,21 @@ RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
     && cp -r /root/.rustup /home/sandbox/.rustup \
     && chown -R sandbox:sandbox /home/sandbox
 
-# Allow sandbox user to update npm global packages (Claude Code auto-updates).
-# npm global prefix is /usr/lib (node_modules) + /usr/bin (binaries).
-RUN chown -R sandbox:sandbox /usr/lib/node_modules \
-    && chown sandbox:sandbox /usr/bin/claude /usr/bin/npx /usr/bin/npm 2>/dev/null || true
+# Configure npm global prefix for sandbox user so auto-updates write to a
+# directory the sandbox user fully owns (creating/replacing symlinks in
+# /usr/bin requires ownership of the directory, not just the files).
+RUN mkdir -p /home/sandbox/.npm-global/bin /home/sandbox/.npm-global/lib \
+    && chown -R sandbox:sandbox /home/sandbox/.npm-global
+
+# Pre-create npm and pip cache dirs owned by sandbox
+RUN mkdir -p /home/sandbox/.npm /home/sandbox/.cache/pip \
+    && chown -R sandbox:sandbox /home/sandbox/.npm /home/sandbox/.cache/pip
+
+# Set npm global prefix for the sandbox user
+RUN su sandbox -c "npm config set prefix /home/sandbox/.npm-global"
 
 ENV HOME=/home/sandbox
-ENV PATH="/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
+ENV PATH="/home/sandbox/.npm-global/bin:/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /workspace
 

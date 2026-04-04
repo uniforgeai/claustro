@@ -42,7 +42,7 @@ fi
 
 # Fix ownership on Docker volume mounts. Volumes are created with root ownership
 # by default; the sandbox user needs write access for npm/pip caches.
-for dir in /home/sandbox/.npm /home/sandbox/.cache/pip; do
+for dir in /home/sandbox/.npm /home/sandbox/.npm-global /home/sandbox/.cache/pip; do
     if [ -d "$dir" ]; then
         chown sandbox:sandbox "$dir" 2>/dev/null || true
     fi
