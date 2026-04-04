@@ -49,11 +49,10 @@ func runRebuild(ctx context.Context, restart bool, noExt bool) error {
 	}
 
 	if restart {
-		return container.RebuildRestart(ctx, cli, id.Project, os.Stdout)
+		return container.RebuildRestart(ctx, cli, id.Project, &cfg.ImageBuild, os.Stdout)
 	}
 
-	imgCfg := config.DefaultImageBuildConfig()
-	if err := image.Build(ctx, cli, &imgCfg, os.Stdout); err != nil {
+	if err := image.Build(ctx, cli, &cfg.ImageBuild, os.Stdout); err != nil {
 		return fmt.Errorf("rebuilding image: %w", err)
 	}
 

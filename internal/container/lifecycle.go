@@ -89,7 +89,7 @@ func NukeContainers(ctx context.Context, cli *client.Client, project string, all
 
 // RebuildRestart stops all project sandboxes, rebuilds the claustro image, then restarts them.
 // Progress messages are written to w.
-func RebuildRestart(ctx context.Context, cli *client.Client, project string, w io.Writer) error {
+func RebuildRestart(ctx context.Context, cli *client.Client, project string, imgCfg *config.ImageBuildConfig, w io.Writer) error {
 	containers, err := ListByProject(ctx, cli, project, false)
 	if err != nil {
 		return fmt.Errorf("listing sandboxes: %w", err)
@@ -103,8 +103,7 @@ func RebuildRestart(ctx context.Context, cli *client.Client, project string, w i
 		}
 	}
 
-	defaultImgCfg := config.DefaultImageBuildConfig()
-	if err := image.Build(ctx, cli, &defaultImgCfg, w); err != nil {
+	if err := image.Build(ctx, cli, imgCfg, w); err != nil {
 		return fmt.Errorf("rebuilding image: %w", err)
 	}
 
