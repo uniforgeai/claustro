@@ -53,12 +53,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code globally via npm (single installation method).
-# Do NOT symlink to ~/.local/bin — that would create a second "native" installation
-# that conflicts with the npm-global one and breaks auto-update detection.
-RUN npm install -g @anthropic-ai/claude-code
-
-# Install MCP servers (filesystem, memory)
+# Install MCP servers (system-wide via npm)
 RUN npm install -g \
     @modelcontextprotocol/server-filesystem \
     @modelcontextprotocol/server-memory
@@ -96,13 +91,17 @@ RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
     && cp -r /root/.rustup /home/sandbox/.rustup \
     && chown -R sandbox:sandbox /home/sandbox
 
-# Allow sandbox user to update npm global packages (Claude Code auto-updates).
-# npm global prefix is /usr/lib (node_modules) + /usr/bin (binaries).
-RUN chown -R sandbox:sandbox /usr/lib/node_modules \
-    && chown sandbox:sandbox /usr/bin/claude /usr/bin/npx /usr/bin/npm 2>/dev/null || true
+# Install Claude Code via native installer (recommended method).
+# Installs to ~/.local/bin/claude -> ~/.local/share/claude/versions/<ver>.
+# Native install auto-updates in the background — no npm or sudo needed.
+RUN su sandbox -c "curl -fsSL https://claude.ai/install.sh | sh"
+
+# Pre-create npm and pip cache dirs owned by sandbox
+RUN mkdir -p /home/sandbox/.npm /home/sandbox/.cache/pip \
+    && chown -R sandbox:sandbox /home/sandbox/.npm /home/sandbox/.cache/pip
 
 ENV HOME=/home/sandbox
-ENV PATH="/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
+ENV PATH="/home/sandbox/.local/bin:/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
 
 WORKDIR /workspace
 

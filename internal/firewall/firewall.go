@@ -23,6 +23,7 @@ type ResolverFunc func(domain string) ([]string, error)
 func DefaultDomains() []string {
 	return []string{
 		"api.anthropic.com",
+		"claude.ai",
 		"registry.npmjs.org",
 		"pypi.org",
 		"github.com",
