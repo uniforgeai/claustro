@@ -68,12 +68,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code globally via npm (single installation method).
-# Do NOT symlink to ~/.local/bin — that would create a second "native" installation
-# that conflicts with the npm-global one and breaks auto-update detection.
-RUN npm install -g @anthropic-ai/claude-code
+# Install MCP servers and ccstatusline as root (system-wide).
+RUN npm install -g ccstatusline || true
 {{if or .MCPFilesystem .MCPMemory}}
-# Install MCP servers (filesystem, memory)
 RUN npm install -g{{if .MCPFilesystem}} \
     @modelcontextprotocol/server-filesystem{{end}}{{if .MCPMemory}} \
     @modelcontextprotocol/server-memory{{end}}
@@ -81,8 +78,6 @@ RUN npm install -g{{if .MCPFilesystem}} \
 # Install MCP fetch server (Python-based)
 RUN pip3 install --break-system-packages mcp-server-fetch
 {{end}}
-# Install ccstatusline (optional — native build may fail on some architectures)
-RUN npm install -g ccstatusline || true
 {{if .Go}}
 # Install gopls (Go language server for LSP support in Claude Code)
 RUN GOPATH=/tmp/gopls-build go install golang.org/x/tools/gopls@latest \
@@ -121,8 +116,11 @@ RUN mkdir -p /home/sandbox/.npm-global/bin /home/sandbox/.npm-global/lib \
 RUN mkdir -p /home/sandbox/.npm /home/sandbox/.cache/pip \
     && chown -R sandbox:sandbox /home/sandbox/.npm /home/sandbox/.cache/pip
 
-# Set npm global prefix for the sandbox user
-RUN su sandbox -c "npm config set prefix /home/sandbox/.npm-global"
+# Set npm global prefix and install Claude Code as sandbox user.
+# Installing into the user prefix ensures claude is invoked from a writable
+# location so auto-update permission checks pass (doctor: "Update permissions: Yes").
+RUN su sandbox -c "npm config set prefix /home/sandbox/.npm-global" \
+    && su sandbox -c "npm install -g @anthropic-ai/claude-code"
 
 ENV HOME=/home/sandbox
 ENV PATH="/home/sandbox/.npm-global/bin:/home/sandbox/.cargo/bin:/usr/local/go/bin:${PATH}"
