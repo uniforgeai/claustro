@@ -125,6 +125,26 @@ func TestRenderDockerfile_NodeAlwaysPresent(t *testing.T) {
 	assert.Contains(t, out, "nodejs")
 }
 
+func TestRenderDockerfile_VoiceMode(t *testing.T) {
+	cfg := config.DefaultImageBuildConfig()
+	tr := true
+	cfg.Tools.Voice = &tr
+
+	content, err := RenderDockerfile(&cfg)
+	require.NoError(t, err)
+	assert.Contains(t, content, "sox")
+	assert.Contains(t, content, "Install SoX for Claude Code voice mode")
+}
+
+func TestRenderDockerfile_NoVoiceMode(t *testing.T) {
+	cfg := config.DefaultImageBuildConfig()
+	// voice defaults to false (nil = disabled for voice)
+
+	content, err := RenderDockerfile(&cfg)
+	require.NoError(t, err)
+	assert.NotContains(t, content, "sox")
+}
+
 func TestRenderDockerfile_IsValidDockerfile(t *testing.T) {
 	cfg := config.DefaultImageBuildConfig()
 	out, err := RenderDockerfile(&cfg)
