@@ -65,8 +65,12 @@ func runBurn(ctx context.Context, name string, all bool) error {
 				sandboxes = append(sandboxes, c)
 			}
 		}
-		removeContainerSet(ctx, cli, siblings, "MCP sibling", true)
-		removeContainerSet(ctx, cli, sandboxes, "sandbox", false)
+		if err := removeContainerSet(ctx, cli, siblings, "MCP sibling", true); err != nil {
+			return err
+		}
+		if err := removeContainerSet(ctx, cli, sandboxes, "sandbox", false); err != nil {
+			return err
+		}
 		return nil
 	}
 
