@@ -10,9 +10,6 @@ import (
 	"github.com/uniforgeai/claustro/internal/updater"
 )
 
-// version is set at build time via -ldflags.
-var version = "dev"
-
 func newUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "update",
