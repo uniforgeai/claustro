@@ -155,10 +155,8 @@ func (c *Config) validateSandboxes() []ValidationResult {
 }
 
 // validateImageBuild validates ImageBuild configuration.
-// TODO: ImageBuildConfig is not yet defined on Config (planned for Task 3).
-// Once ImageBuildConfig is added with Languages.Node, add a check here:
-//
-//	if c.ImageBuild.Languages.Node == false { ... error ... }
+// Placeholder: ImageBuildConfig fields are not yet defined on Config.
+// When ImageBuild gains structured fields (e.g. Languages), add validation rules here.
 func (c *Config) validateImageBuild() []ValidationResult {
 	return nil
 }

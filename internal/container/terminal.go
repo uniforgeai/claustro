@@ -15,25 +15,26 @@ import (
 	"golang.org/x/term"
 )
 
-var savedState *term.State
-
-func setRawTerminal() error {
+// setRawTerminal puts the host terminal into raw mode and returns the saved
+// state so that it can be restored later. Returns (nil, nil) when stdin is not
+// a terminal.
+func setRawTerminal() (*term.State, error) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
-		return nil
+		return nil, nil
 	}
 	state, err := term.MakeRaw(fd)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	savedState = state
-	return nil
+	return state, nil
 }
 
-func restoreTerminal() {
-	if savedState != nil {
-		term.Restore(int(os.Stdin.Fd()), savedState) //nolint:errcheck
-		savedState = nil
+// restoreTerminal restores the host terminal to the given saved state. It is a
+// no-op when state is nil.
+func restoreTerminal(state *term.State) {
+	if state != nil {
+		term.Restore(int(os.Stdin.Fd()), state) //nolint:errcheck
 	}
 }
 
