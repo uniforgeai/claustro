@@ -38,24 +38,8 @@ func newUpCmd() *cobra.Command {
 		Short: "Create and start a sandbox",
 		Long:  "Build the claustro image if needed, then create and start a sandbox container.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cliEnv := parseEnvFlags(envs)
-			var readOnlyPtr *bool
-			if cmd.Flags().Changed("readonly") {
-				readOnlyPtr = &readOnly
-			}
-			var firewallPtr *bool
-			if cmd.Flags().Changed("firewall") {
-				firewallPtr = &firewall
-			}
-			return runUp(cmd.Context(), name, config.CLIOverrides{
-				Name:          name,
-				Workdir:       workdir,
-				Mounts:        mounts,
-				Env:           cliEnv,
-				ReadOnly:      readOnlyPtr,
-				Firewall:      firewallPtr,
-				IsolatedState: isolatedState,
-			})
+			overrides := buildCLIOverrides(cmd, name, workdir, mounts, envs, readOnly, firewall, isolatedState)
+			return runUp(cmd.Context(), name, overrides)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-generated)`)
@@ -66,6 +50,28 @@ func newUpCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&firewall, "firewall", false, `Enable egress firewall (restrict outbound traffic to allowlist)`)
 	cmd.Flags().BoolVar(&isolatedState, "isolated-state", false, `Use a Docker volume for Claude state instead of bind-mounting ~/.claude`)
 	return cmd
+}
+
+// buildCLIOverrides constructs a CLIOverrides from the parsed command flags.
+func buildCLIOverrides(cmd *cobra.Command, name, workdir string, mounts, envs []string, readOnly, fw, isolatedState bool) config.CLIOverrides {
+	cliEnv := parseEnvFlags(envs)
+	var readOnlyPtr *bool
+	if cmd.Flags().Changed("readonly") {
+		readOnlyPtr = &readOnly
+	}
+	var firewallPtr *bool
+	if cmd.Flags().Changed("firewall") {
+		firewallPtr = &fw
+	}
+	return config.CLIOverrides{
+		Name:          name,
+		Workdir:       workdir,
+		Mounts:        mounts,
+		Env:           cliEnv,
+		ReadOnly:      readOnlyPtr,
+		Firewall:      firewallPtr,
+		IsolatedState: isolatedState,
+	}
 }
 
 // parseEnvFlags converts ["KEY=VALUE", ...] into a map.
@@ -116,6 +122,9 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 	return nil
 }
 
+// maxNameRetries is the maximum number of attempts to generate a unique sandbox name.
+const maxNameRetries = 5
+
 // ensureRunning ensures a sandbox container is running for the given identity.
 // If the sandbox is already running, it returns alreadyRunning=true and takes no action.
 // When quiet is true, output is minimal (suitable for auto-up from the claude command).
@@ -134,28 +143,11 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	}
 
 	// If the name was auto-generated and a container with that name already exists,
-	// retry with a new random name (up to 5 attempts).
+	// retry with a new random name.
 	if nameWasEmpty && existing != nil {
-		const maxRetries = 5
-		var found bool
-		for i := 0; i < maxRetries; i++ {
-			newName := identity.RandomName()
-			candidate, cerr := identity.FromCWD(newName)
-			if cerr != nil {
-				return nil, false, fmt.Errorf("resolving identity: %w", cerr)
-			}
-			collision, cerr := container.FindByIdentity(ctx, cli, candidate)
-			if cerr != nil {
-				return nil, false, fmt.Errorf("finding sandbox: %w", cerr)
-			}
-			if collision == nil {
-				id = candidate
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, false, fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxRetries)
+		id, err = generateUniqueName(ctx, cli)
+		if err != nil {
+			return nil, false, err
 		}
 	}
 
@@ -185,59 +177,17 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		"image", resolved.ImageName,
 	)
 
-	var opts container.CreateOptions
+	opts, err := buildImageIfNeeded(ctx, cli, id, cfg)
+	if err != nil {
+		return nil, false, err
+	}
 	opts.Firewall = resolved.Firewall
 	opts.CPUs = resolved.CPUs
 	opts.Memory = resolved.Memory
-	if len(cfg.ImageConfig.Extra) > 0 {
-		steps := extraRunSteps(cfg.ImageConfig.Extra)
-		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
-			return nil, false, fmt.Errorf("building extension image: %w", err)
-		}
-		opts.ImageName = image.ExtImageName(id.Project)
-	} else {
-		if err := image.EnsureBuilt(ctx, cli, &cfg.ImageBuild, os.Stdout); err != nil {
-			return nil, false, fmt.Errorf("building image: %w", err)
-		}
-	}
 
-	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
-	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir, resolved.ReadOnly, resolved.IsolatedState)
+	mounts, err := setupVolumesAndMounts(ctx, cli, id, cfg, resolved)
 	if err != nil {
-		return nil, false, fmt.Errorf("assembling mounts: %w", err)
-	}
-
-	// When isolated state is requested, create a project-scoped volume for Claude state.
-	if resolved.IsolatedState {
-		volName := identity.ProjectVolumeName(id.Project, "claude-state")
-		if err := container.EnsureVolume(ctx, cli, volName, id.Labels()); err != nil {
-			return nil, false, fmt.Errorf("ensuring claude state volume %q: %w", volName, err)
-		}
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeVolume,
-			Source: volName,
-			Target: "/home/sandbox/.claude",
-		})
-	}
-
-	// Ensure npm and pip cache volumes exist, then mount them.
-	labels := id.Labels()
-	for _, vol := range []struct {
-		purpose string
-		target  string
-	}{
-		{"npm", "/home/sandbox/.npm"},
-		{"pip", "/home/sandbox/.cache/pip"},
-	} {
-		volName := id.VolumeName(vol.purpose)
-		if err := container.EnsureVolume(ctx, cli, volName, labels); err != nil {
-			return nil, false, fmt.Errorf("ensuring volume %q: %w", volName, err)
-		}
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeVolume,
-			Source: volName,
-			Target: vol.target,
-		})
+		return nil, false, err
 	}
 
 	slog.Info("creating sandbox", "container", id.ContainerName())
@@ -259,22 +209,127 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 		slog.Warn("failed to write MCP config", "err", err)
 	}
 
-	// Apply egress firewall rules if enabled.
-	if resolved.Firewall {
-		slog.Info("applying egress firewall", "container", id.ContainerName())
-		if err := firewall.Apply(ctx, cli, containerID, cfg.Firewall.Allow); err != nil {
-			// Firewall failure is fatal — stop and remove the container.
-			_ = container.Stop(ctx, cli, containerID)
-			_ = container.Remove(ctx, cli, containerID)
-			return nil, false, fmt.Errorf("applying firewall: %w", err)
-		}
+	if err := applyFirewall(ctx, cli, containerID, id, cfg, resolved.Firewall); err != nil {
+		return nil, false, err
 	}
 
 	return id, false, nil
 }
 
+// generateUniqueName retries random name generation up to maxNameRetries times
+// to find a name that does not collide with an existing container.
+func generateUniqueName(ctx context.Context, cli *client.Client) (*identity.Identity, error) {
+	for i := 0; i < maxNameRetries; i++ {
+		newName := identity.RandomName()
+		candidate, err := identity.FromCWD(newName)
+		if err != nil {
+			return nil, fmt.Errorf("resolving identity: %w", err)
+		}
+		collision, err := container.FindByIdentity(ctx, cli, candidate)
+		if err != nil {
+			return nil, fmt.Errorf("finding sandbox: %w", err)
+		}
+		if collision == nil {
+			return candidate, nil
+		}
+	}
+	return nil, fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxNameRetries)
+}
+
+// buildImageIfNeeded checks whether a custom extended image or the base image
+// needs to be built, and returns CreateOptions with ImageName set accordingly.
+func buildImageIfNeeded(ctx context.Context, cli *client.Client, id *identity.Identity, cfg *config.Config) (container.CreateOptions, error) {
+	var opts container.CreateOptions
+	if len(cfg.ImageConfig.Extra) > 0 {
+		steps := extraRunSteps(cfg.ImageConfig.Extra)
+		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
+			return opts, fmt.Errorf("building extension image: %w", err)
+		}
+		opts.ImageName = image.ExtImageName(id.Project)
+	} else {
+		if err := image.EnsureBuilt(ctx, cli, &cfg.ImageBuild, os.Stdout); err != nil {
+			return opts, fmt.Errorf("building image: %w", err)
+		}
+	}
+	return opts, nil
+}
+
+// setupVolumesAndMounts assembles bind mounts and creates Docker volumes for
+// isolated state and package caches.
+func setupVolumesAndMounts(ctx context.Context, cli *client.Client, id *identity.Identity, cfg *config.Config, resolved *config.SandboxConfig) ([]mount.Mount, error) {
+	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
+	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir, resolved.ReadOnly, resolved.IsolatedState)
+	if err != nil {
+		return nil, fmt.Errorf("assembling mounts: %w", err)
+	}
+
+	// When isolated state is requested, create a project-scoped volume for Claude state.
+	if resolved.IsolatedState {
+		volName := identity.ProjectVolumeName(id.Project, "claude-state")
+		if err := container.EnsureVolume(ctx, cli, volName, id.Labels()); err != nil {
+			return nil, fmt.Errorf("ensuring claude state volume %q: %w", volName, err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volName,
+			Target: "/home/sandbox/.claude",
+		})
+	}
+
+	// Ensure npm and pip cache volumes exist, then mount them.
+	labels := id.Labels()
+	for _, vol := range []struct {
+		purpose string
+		target  string
+	}{
+		{"npm", "/home/sandbox/.npm"},
+		{"pip", "/home/sandbox/.cache/pip"},
+	} {
+		volName := id.VolumeName(vol.purpose)
+		if err := container.EnsureVolume(ctx, cli, volName, labels); err != nil {
+			return nil, fmt.Errorf("ensuring volume %q: %w", volName, err)
+		}
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volName,
+			Target: vol.target,
+		})
+	}
+
+	return mounts, nil
+}
+
+// applyFirewall applies egress firewall rules if enabled. On failure it stops
+// and removes the container, returning a fatal error.
+func applyFirewall(ctx context.Context, cli *client.Client, containerID string, id *identity.Identity, cfg *config.Config, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	slog.Info("applying egress firewall", "container", id.ContainerName())
+	if err := firewall.Apply(ctx, cli, containerID, cfg.Firewall.Allow); err != nil {
+		// Firewall failure is fatal — stop and remove the container.
+		_ = container.Stop(ctx, cli, containerID)
+		_ = container.Remove(ctx, cli, containerID)
+		return fmt.Errorf("applying firewall: %w", err)
+	}
+	return nil
+}
+
 // writeMCPConfig builds the merged MCP config and writes it into the container.
 func writeMCPConfig(ctx context.Context, cli *client.Client, containerID string, cfg *config.Config, isolatedState bool) error {
+	mcpCfg := mergeMCPConfigs(cfg, isolatedState)
+
+	cmd, err := mcp.WriteCommand(mcpCfg, mcp.MCPConfigPath)
+	if err != nil {
+		return fmt.Errorf("building mcp write command: %w", err)
+	}
+
+	return container.ExecSimple(ctx, cli, containerID, cmd)
+}
+
+// mergeMCPConfigs builds a merged MCP configuration from defaults, host config,
+// project-level stdio overrides, and SSE endpoint entries.
+func mergeMCPConfigs(cfg *config.Config, isolatedState bool) mcp.Config {
 	mcpCfg := mcp.DefaultConfig()
 
 	// When bind-mounted, read existing host mcp.json and merge it.
@@ -305,12 +360,7 @@ func writeMCPConfig(ctx context.Context, cli *client.Client, containerID string,
 		mcpCfg = mcp.Merge(mcpCfg, sseCfg)
 	}
 
-	cmd, err := mcp.WriteCommand(mcpCfg, mcp.MCPConfigPath)
-	if err != nil {
-		return fmt.Errorf("building mcp write command: %w", err)
-	}
-
-	return container.ExecSimple(ctx, cli, containerID, cmd)
+	return mcpCfg
 }
 
 // extraRunSteps extracts the Run strings from a slice of ExtraStep.

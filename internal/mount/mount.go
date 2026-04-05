@@ -15,6 +15,25 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 )
 
+// Container path constants.
+const (
+	containerHome       = "/home/sandbox"
+	containerClaudeDir  = containerHome + "/.claude"
+	containerClaudeJSON = containerHome + "/.claude.json"
+	containerPluginsDir = containerClaudeDir + "/plugins"
+	containerGitconfig  = containerHome + "/.gitconfig"
+	containerGHConfig   = containerHome + "/.config/gh"
+	containerSSHDir     = containerHome + "/.ssh"
+	containerKnownHosts = containerSSHDir + "/known_hosts"
+	containerWorkspace  = "/workspace"
+	clipboardRunDir     = "/run/claustro"
+)
+
+// File permission constants.
+const (
+	dirModeWorld = 0o777
+)
+
 // dockerDesktopRelayPath is the SSH agent socket path that macOS container runtimes
 // (Docker Desktop and OrbStack) expose inside containers. The host SSH agent socket
 // lives on the macOS side and cannot be reached from the Linux VM; both runtimes
@@ -58,44 +77,67 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 		return nil, fmt.Errorf("getting home directory: %w", err)
 	}
 
-	mounts := []mount.Mount{
-		{
-			Type:     mount.TypeBind,
-			Source:   hostProjectPath,
-			Target:   "/workspace",
-			ReadOnly: readOnly,
-		},
-	}
-
-	if !isolatedState {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: filepath.Join(home, ".claude"),
-			Target: "/home/sandbox/.claude",
-		})
-
-		claudeJSON := filepath.Join(home, ".claude.json")
-		if _, err := os.Stat(claudeJSON); err == nil {
-			mounts = append(mounts, mount.Mount{
-				Type:   mount.TypeBind,
-				Source: claudeJSON,
-				Target: "/home/sandbox/.claude.json",
-			})
-		}
-	}
-
 	if git == nil {
 		git = &config.GitConfig{}
 	}
 
+	var mounts []mount.Mount
+	addWorkspaceMount(&mounts, hostProjectPath, readOnly)
+	addClaudeMounts(&mounts, home, isolatedState)
+	addGitMounts(&mounts, home, git)
+	addSSHMounts(&mounts, home, git)
+	addPluginMounts(&mounts, home, isolatedState)
+	if err := addClipboardMount(&mounts, clipboardSockDir); err != nil {
+		return nil, err
+	}
+
+	return mounts, nil
+}
+
+// addWorkspaceMount appends the host project bind mount at /workspace.
+func addWorkspaceMount(mounts *[]mount.Mount, hostProjectPath string, readOnly bool) {
+	*mounts = append(*mounts, mount.Mount{
+		Type:     mount.TypeBind,
+		Source:   hostProjectPath,
+		Target:   containerWorkspace,
+		ReadOnly: readOnly,
+	})
+}
+
+// addClaudeMounts appends the ~/.claude directory and ~/.claude.json mounts.
+// Skipped when isolatedState is true.
+func addClaudeMounts(mounts *[]mount.Mount, home string, isolatedState bool) {
+	if isolatedState {
+		return
+	}
+
+	*mounts = append(*mounts, mount.Mount{
+		Type:   mount.TypeBind,
+		Source: filepath.Join(home, ".claude"),
+		Target: containerClaudeDir,
+	})
+
+	claudeJSON := filepath.Join(home, ".claude.json")
+	if _, err := os.Stat(claudeJSON); err == nil {
+		*mounts = append(*mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: claudeJSON,
+			Target: containerClaudeJSON,
+		})
+	}
+}
+
+// addGitMounts appends .gitconfig, .config/gh/, and .ssh/known_hosts mounts
+// based on git configuration.
+func addGitMounts(mounts *[]mount.Mount, home string, git *config.GitConfig) {
 	// ~/.gitconfig (read-only)
 	if git.IsMountGitconfig() {
 		gitconfig := filepath.Join(home, ".gitconfig")
 		if _, err := os.Stat(gitconfig); err == nil {
-			mounts = append(mounts, mount.Mount{
+			*mounts = append(*mounts, mount.Mount{
 				Type:     mount.TypeBind,
 				Source:   gitconfig,
-				Target:   "/home/sandbox/.gitconfig",
+				Target:   containerGitconfig,
 				ReadOnly: true,
 			})
 		}
@@ -105,10 +147,10 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	if git.IsMountGhConfig() {
 		ghConfig := filepath.Join(home, ".config", "gh")
 		if _, err := os.Stat(ghConfig); err == nil {
-			mounts = append(mounts, mount.Mount{
+			*mounts = append(*mounts, mount.Mount{
 				Type:   mount.TypeBind,
 				Source: ghConfig,
-				Target: "/home/sandbox/.config/gh",
+				Target: containerGHConfig,
 			})
 		}
 	}
@@ -116,14 +158,18 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	// ~/.ssh/known_hosts (read-only, always mounted when present for SSH host key verification)
 	knownHosts := filepath.Join(home, ".ssh", "known_hosts")
 	if _, err := os.Stat(knownHosts); err == nil {
-		mounts = append(mounts, mount.Mount{
+		*mounts = append(*mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   knownHosts,
-			Target:   "/home/sandbox/.ssh/known_hosts",
+			Target:   containerKnownHosts,
 			ReadOnly: true,
 		})
 	}
+}
 
+// addSSHMounts appends SSH agent socket, public key, and full ~/.ssh/ mounts
+// based on git configuration.
+func addSSHMounts(mounts *[]mount.Mount, home string, git *config.GitConfig) {
 	// SSH agent socket + public keys (when agent forwarding enabled)
 	if git.IsForwardAgent() {
 		if runtime.GOOS == "darwin" {
@@ -131,14 +177,14 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 			// not visible there. Both Docker Desktop and OrbStack relay it at a
 			// well-known fixed path — mount that relay unconditionally so the agent
 			// is reachable regardless of the host SSH_AUTH_SOCK value.
-			mounts = append(mounts, mount.Mount{
+			*mounts = append(*mounts, mount.Mount{
 				Type:   mount.TypeBind,
 				Source: dockerDesktopRelayPath,
 				Target: dockerDesktopRelayPath,
 			})
 		} else if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 			// On Linux, the agent socket is on the same kernel; mount it directly.
-			mounts = append(mounts, mount.Mount{
+			*mounts = append(*mounts, mount.Mount{
 				Type:   mount.TypeBind,
 				Source: sock,
 				Target: sock,
@@ -152,10 +198,10 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 			for _, e := range entries {
 				if !e.IsDir() && strings.HasSuffix(e.Name(), ".pub") {
 					src := filepath.Join(sshDir, e.Name())
-					mounts = append(mounts, mount.Mount{
+					*mounts = append(*mounts, mount.Mount{
 						Type:     mount.TypeBind,
 						Source:   src,
-						Target:   "/home/sandbox/.ssh/" + e.Name(),
+						Target:   containerSSHDir + "/" + e.Name(),
 						ReadOnly: true,
 					})
 				}
@@ -164,16 +210,25 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	}
 
 	// ~/.ssh/ (read-only, opt-in only)
-	if git.IsMountSSHDir() {
-		sshDir := filepath.Join(home, ".ssh")
-		if _, err := os.Stat(sshDir); err == nil {
-			mounts = append(mounts, mount.Mount{
-				Type:     mount.TypeBind,
-				Source:   sshDir,
-				Target:   "/home/sandbox/.ssh",
-				ReadOnly: true,
-			})
-		}
+	if !git.IsMountSSHDir() {
+		return
+	}
+	sshDir := filepath.Join(home, ".ssh")
+	if _, err := os.Stat(sshDir); err == nil {
+		*mounts = append(*mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   sshDir,
+			Target:   containerSSHDir,
+			ReadOnly: true,
+		})
+	}
+}
+
+// addPluginMounts appends the plugin directory remount when the host home
+// differs from the container home. Skipped when isolatedState is true.
+func addPluginMounts(mounts *[]mount.Mount, home string, isolatedState bool) {
+	if isolatedState {
+		return
 	}
 
 	// Plugin path remapping: installed_plugins.json and known_marketplaces.json
@@ -181,37 +236,39 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	// the container the home dir is /home/sandbox, so those paths don't resolve.
 	// Mount the entire plugins directory at its original host path (read-only)
 	// so Claude Code can find both plugin cache and marketplace data.
-	if !isolatedState {
-		pluginDir := filepath.Join(home, ".claude", "plugins")
-		containerPluginDir := "/home/sandbox/.claude/plugins"
-		if pluginDir != containerPluginDir {
-			if _, err := os.Stat(pluginDir); err == nil {
-				mounts = append(mounts, mount.Mount{
-					Type:     mount.TypeBind,
-					Source:   pluginDir,
-					Target:   pluginDir,
-					ReadOnly: true,
-				})
-			}
-		}
+	pluginDir := filepath.Join(home, ".claude", "plugins")
+	if pluginDir == containerPluginsDir {
+		return
 	}
-
-	// Clipboard bridge socket directory
-	if clipboardSockDir != "" {
-		if err := os.MkdirAll(clipboardSockDir, 0o777); err != nil {
-			return nil, fmt.Errorf("creating clipboard socket directory: %w", err)
-		}
-		// Explicitly chmod to override umask — the sandbox user (uid 1000) must be
-		// able to traverse this directory even though it is owned by the host uid.
-		if err := os.Chmod(clipboardSockDir, 0o777); err != nil {
-			return nil, fmt.Errorf("setting clipboard socket directory permissions: %w", err)
-		}
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: clipboardSockDir,
-			Target: "/run/claustro",
+	if _, err := os.Stat(pluginDir); err == nil {
+		*mounts = append(*mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   pluginDir,
+			Target:   pluginDir,
+			ReadOnly: true,
 		})
 	}
+}
 
-	return mounts, nil
+// addClipboardMount creates the clipboard socket directory on the host and
+// appends a bind mount at /run/claustro. No-op when clipboardSockDir is empty.
+func addClipboardMount(mounts *[]mount.Mount, clipboardSockDir string) error {
+	if clipboardSockDir == "" {
+		return nil
+	}
+
+	if err := os.MkdirAll(clipboardSockDir, dirModeWorld); err != nil {
+		return fmt.Errorf("creating clipboard socket directory: %w", err)
+	}
+	// Explicitly chmod to override umask — the sandbox user (uid 1000) must be
+	// able to traverse this directory even though it is owned by the host uid.
+	if err := os.Chmod(clipboardSockDir, dirModeWorld); err != nil {
+		return fmt.Errorf("setting clipboard socket directory permissions: %w", err)
+	}
+	*mounts = append(*mounts, mount.Mount{
+		Type:   mount.TypeBind,
+		Source: clipboardSockDir,
+		Target: clipboardRunDir,
+	})
+	return nil
 }

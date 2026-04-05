@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
-	"github.com/uniforgeai/claustro/internal/identity"
 )
 
 func newExecCmd() *cobra.Command {
@@ -32,35 +31,11 @@ func runExec(ctx context.Context, name string, args []string) error {
 		return fmt.Errorf("command required after '--'")
 	}
 
-	// Derive project slug from CWD for auto-select.
-	tmpID, err := identity.FromCWD("")
-	if err != nil {
-		return fmt.Errorf("resolving identity: %w", err)
-	}
-
-	cli, err := newDockerClient()
+	cli, _, c, err := resolveTargetContainer(ctx, name)
 	if err != nil {
 		return err
 	}
 	defer cli.Close() //nolint:errcheck
-
-	resolvedName, err := resolveName(ctx, cli, tmpID.Project, name)
-	if err != nil {
-		return err
-	}
-
-	id, err := identity.FromCWD(resolvedName)
-	if err != nil {
-		return fmt.Errorf("resolving identity: %w", err)
-	}
-
-	c, err := container.FindByIdentity(ctx, cli, id)
-	if err != nil {
-		return fmt.Errorf("finding sandbox: %w", err)
-	}
-	if c == nil {
-		return errNotRunning(id)
-	}
 
 	return container.Exec(ctx, cli, c.ID, args, container.ExecOptions{})
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/container"
-	"github.com/uniforgeai/claustro/internal/identity"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -27,35 +26,11 @@ func newStatusCmd() *cobra.Command {
 }
 
 func runStatus(ctx context.Context, name string) error {
-	// Derive project slug from CWD for auto-select.
-	tmpID, err := identity.FromCWD("")
-	if err != nil {
-		return fmt.Errorf("resolving identity: %w", err)
-	}
-
-	cli, err := newDockerClient()
+	cli, _, c, err := resolveTargetContainer(ctx, name)
 	if err != nil {
 		return err
 	}
 	defer cli.Close() //nolint:errcheck
-
-	resolvedName, err := resolveName(ctx, cli, tmpID.Project, name)
-	if err != nil {
-		return err
-	}
-
-	id, err := identity.FromCWD(resolvedName)
-	if err != nil {
-		return fmt.Errorf("resolving identity: %w", err)
-	}
-
-	c, err := container.FindByIdentity(ctx, cli, id)
-	if err != nil {
-		return fmt.Errorf("finding sandbox: %w", err)
-	}
-	if c == nil {
-		return errNotRunning(id)
-	}
 
 	info, err := container.Inspect(ctx, cli, c.ID)
 	if err != nil {
