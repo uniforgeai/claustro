@@ -62,8 +62,8 @@ func runLs(ctx context.Context, all bool) error {
 	}
 
 	for _, c := range containers {
-		name := c.Labels["claustro.name"]
-		project := c.Labels["claustro.project"]
+		name := c.Labels[identity.LabelName]
+		project := c.Labels[identity.LabelProject]
 		containerName := strings.TrimPrefix(c.Names[0], "/")
 		if all {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", project, name, containerName, c.Status) //nolint:errcheck

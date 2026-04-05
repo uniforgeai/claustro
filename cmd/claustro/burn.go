@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
@@ -66,28 +65,8 @@ func runBurn(ctx context.Context, name string, all bool) error {
 				sandboxes = append(sandboxes, c)
 			}
 		}
-		for _, c := range siblings {
-			cName := strings.TrimPrefix(c.Names[0], "/")
-			fmt.Printf("Removing MCP sibling %s...\n", cName)
-			if err := container.Stop(ctx, cli, c.ID); err != nil {
-				fmt.Printf("(stop: %v — continuing)\n", err)
-			}
-			if err := container.Remove(ctx, cli, c.ID); err != nil {
-				fmt.Printf("error removing %s: %v\n", cName, err)
-			}
-		}
-		for _, c := range sandboxes {
-			cName := strings.TrimPrefix(c.Names[0], "/")
-			fmt.Printf("Burning sandbox %s...\n", cName)
-			if err := container.Stop(ctx, cli, c.ID); err != nil {
-				fmt.Printf("(stop: %v — continuing)\n", err)
-			}
-			if err := container.Remove(ctx, cli, c.ID); err != nil {
-				fmt.Printf("error removing container %s: %v\n", cName, err)
-				continue
-			}
-			fmt.Printf("Burned: %s\n", cName)
-		}
+		removeContainerSet(ctx, cli, siblings, "MCP sibling", true)
+		removeContainerSet(ctx, cli, sandboxes, "sandbox", false)
 		return nil
 	}
 

@@ -17,7 +17,10 @@ import (
 	"github.com/uniforgeai/claustro/internal/identity"
 )
 
-const defaultSSEPort = 8000
+const (
+	defaultSSEPort    = 8000
+	defaultStopTimeout = 10
+)
 
 // effectivePort returns the port to use, defaulting to 8000 if zero.
 func effectivePort(port int) int {
@@ -104,7 +107,7 @@ func StopSSESiblings(ctx context.Context, cli *client.Client, id *identity.Ident
 
 	for _, c := range siblings {
 		name := strings.TrimPrefix(c.Names[0], "/")
-		timeout := 10
+		timeout := defaultStopTimeout
 		if err := cli.ContainerStop(ctx, c.ID, containertypes.StopOptions{Timeout: &timeout}); err != nil {
 			slog.Warn("failed to stop MCP sibling", "container", name, "err", err)
 		}
@@ -126,8 +129,8 @@ func listSiblings(ctx context.Context, cli *client.Client, id *identity.Identity
 
 func filtersMCPSiblings(id *identity.Identity) filters.Args {
 	return filters.NewArgs(
-		filters.Arg("label", "claustro.project="+id.Project),
-		filters.Arg("label", "claustro.name="+id.Name),
-		filters.Arg("label", "claustro.role=mcp-sse"),
+		filters.Arg("label", identity.LabelProject+"="+id.Project),
+		filters.Arg("label", identity.LabelName+"="+id.Name),
+		filters.Arg("label", identity.LabelRole+"=mcp-sse"),
 	)
 }

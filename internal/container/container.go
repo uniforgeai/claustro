@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"golang.org/x/term"
+	dockertypes "github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
@@ -33,6 +35,18 @@ import (
 const (
 	defaultNanoCPUs = 4_000_000_000          // 4 CPUs
 	defaultMemory   = 8 * 1024 * 1024 * 1024 // 8 GiB
+)
+
+// Magic-number constants used across container operations.
+const (
+	defaultStopTimeout = 10                            // seconds to wait before SIGKILL
+	networkDriver      = "bridge"                      // Docker network driver
+	containerUser      = "sandbox"                     // user inside container
+	noNewPrivileges    = "no-new-privileges:true"      // security option
+	capNetAdmin        = "NET_ADMIN"                   // capability for firewall
+	nanosecondsPerCPU  = 1e9                           // nanoseconds per 1 CPU
+	containerWorkdir   = "/workspace"                  // working directory for exec
+	containerHome      = "/home/sandbox"               // home directory inside container
 )
 
 // CreateOptions configures optional parameters for container creation.
@@ -65,7 +79,7 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 
 	env := []string{
 		"CLAUSTRO_HOST_PATH=" + id.HostPath,
-		"HOME=/home/sandbox",
+		"HOME=" + containerHome,
 	}
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
@@ -92,14 +106,14 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 
 	hostCfg := &containertypes.HostConfig{
 		Mounts:      mounts,
-		SecurityOpt: []string{"no-new-privileges:true"},
+		SecurityOpt: []string{noNewPrivileges},
 		Resources: containertypes.Resources{
 			NanoCPUs: nanoCPUs,
 			Memory:   memBytes,
 		},
 	}
 	if opts.Firewall {
-		hostCfg.CapAdd = []string{"NET_ADMIN"}
+		hostCfg.CapAdd = []string{capNetAdmin}
 	}
 
 	netCfg := &networktypes.NetworkingConfig{
@@ -128,7 +142,7 @@ func parseNanoCPUs(s string) (int64, error) {
 	if val <= 0 {
 		return 0, fmt.Errorf("cpus must be positive, got %v", val)
 	}
-	return int64(val * 1e9), nil
+	return int64(val * nanosecondsPerCPU), nil
 }
 
 // parseMemory converts a memory string (e.g. "8G", "512M", "1024K") to bytes.
@@ -188,33 +202,15 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          opts.Interactive,
-		User:         "sandbox",
-		WorkingDir:   "/workspace",
+		User:         containerUser,
+		WorkingDir:   containerWorkdir,
 	}
 	if opts.Interactive {
 		execCfg.Env = append(termEnv(), gitEnv()...)
 	}
 
-	// Start clipboard bridge for interactive sessions when a socket dir is provided.
-	// On macOS, Docker containers run in a Linux VM — Unix sockets created on the
-	// host are not reachable from inside the container. Use TCP + port file instead.
-	if opts.Interactive && opts.ClipboardSockDir != "" {
-		srv := clipboard.New(clipboard.NewPlatformHandler())
-		if runtime.GOOS == "darwin" {
-			if _, err := srv.StartTCP(opts.ClipboardSockDir); err != nil {
-				slog.Warn("clipboard bridge unavailable", "err", err)
-			} else {
-				defer srv.Close() //nolint:errcheck
-			}
-		} else {
-			sockPath := filepath.Join(opts.ClipboardSockDir, "clipboard.sock")
-			if err := srv.Start(sockPath); err != nil {
-				slog.Warn("clipboard bridge unavailable", "err", err)
-			} else {
-				defer srv.Close() //nolint:errcheck
-			}
-		}
-	}
+	cleanup := setupClipboardBridge(opts)
+	defer cleanup()
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
 	if err != nil {
@@ -228,26 +224,8 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 	defer resp.Close()
 
 	if opts.Interactive {
-		// Set raw terminal mode for interactive sessions.
-		if err := setRawTerminal(); err == nil {
-			defer restoreTerminal()
-		}
-
-		fd := int(os.Stdin.Fd())
-
-		// Set the container PTY to the host terminal's current dimensions.
-		w, h := getTerminalSize(fd)
-		_ = cli.ContainerExecResize(ctx, execID.ID, containertypes.ResizeOptions{Width: w, Height: h})
-
-		// Forward future resize events for the lifetime of this session.
-		resizeCtx, cancelResize := context.WithCancel(ctx)
-		defer cancelResize()
-		go monitorResizeEvents(resizeCtx, cli, execID.ID, fd)
-
-		// When Tty=true Docker streams raw PTY bytes without the 8-byte
-		// multiplexing header, so plain io.Copy is correct here.
-		go io.Copy(resp.Conn, os.Stdin)  //nolint:errcheck
-		io.Copy(os.Stdout, resp.Reader)  //nolint:errcheck
+		teardown := setupInteractiveSession(ctx, cli, execID.ID, resp)
+		defer teardown()
 	} else {
 		io.Copy(os.Stdout, resp.Reader) //nolint:errcheck
 	}
@@ -263,9 +241,66 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 	return nil
 }
 
+// setupClipboardBridge starts a clipboard bridge server for interactive sessions
+// when a socket directory is provided. It returns a cleanup function that stops
+// the server. On macOS, TCP is used because Unix sockets are not reachable from
+// inside Docker's Linux VM.
+func setupClipboardBridge(opts ExecOptions) func() {
+	noop := func() {}
+	if !opts.Interactive || opts.ClipboardSockDir == "" {
+		return noop
+	}
+
+	srv := clipboard.New(clipboard.NewPlatformHandler())
+	if runtime.GOOS == "darwin" {
+		if _, err := srv.StartTCP(opts.ClipboardSockDir); err != nil {
+			slog.Warn("clipboard bridge unavailable", "err", err)
+			return noop
+		}
+	} else {
+		sockPath := filepath.Join(opts.ClipboardSockDir, "clipboard.sock")
+		if err := srv.Start(sockPath); err != nil {
+			slog.Warn("clipboard bridge unavailable", "err", err)
+			return noop
+		}
+	}
+	return func() { srv.Close() } //nolint:errcheck
+}
+
+// setupInteractiveSession configures raw terminal mode, initial PTY sizing,
+// resize monitoring, and I/O forwarding for an interactive exec session.
+// It returns a cleanup function that restores the terminal and cancels resize
+// monitoring.
+func setupInteractiveSession(ctx context.Context, cli *client.Client, execID string, resp dockertypes.HijackedResponse) func() {
+	var termState *term.State
+	if state, err := setRawTerminal(); err == nil {
+		termState = state
+	}
+
+	fd := int(os.Stdin.Fd())
+
+	// Set the container PTY to the host terminal's current dimensions.
+	w, h := getTerminalSize(fd)
+	_ = cli.ContainerExecResize(ctx, execID, containertypes.ResizeOptions{Width: w, Height: h})
+
+	// Forward future resize events for the lifetime of this session.
+	resizeCtx, cancelResize := context.WithCancel(ctx)
+	go monitorResizeEvents(resizeCtx, cli, execID, fd)
+
+	// When Tty=true Docker streams raw PTY bytes without the 8-byte
+	// multiplexing header, so plain io.Copy is correct here.
+	go io.Copy(resp.Conn, os.Stdin) //nolint:errcheck
+	io.Copy(os.Stdout, resp.Reader) //nolint:errcheck
+
+	return func() {
+		cancelResize()
+		restoreTerminal(termState)
+	}
+}
+
 // Stop stops a running container (10 second timeout).
 func Stop(ctx context.Context, cli *client.Client, containerID string) error {
-	timeout := 10
+	timeout := defaultStopTimeout
 	if err := cli.ContainerStop(ctx, containerID, containertypes.StopOptions{Timeout: &timeout}); err != nil {
 		return fmt.Errorf("stopping container: %w", err)
 	}
@@ -315,23 +350,6 @@ func ListByProject(ctx context.Context, cli *client.Client, project string, allP
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
-	}
-	return containers, nil
-}
-
-// ListMCPSiblings returns all MCP SSE sibling containers for the given sandbox identity.
-func ListMCPSiblings(ctx context.Context, cli *client.Client, id *identity.Identity) ([]containertypes.Summary, error) {
-	args := filters.NewArgs(
-		filters.Arg("label", "claustro.project="+id.Project),
-		filters.Arg("label", "claustro.name="+id.Name),
-		filters.Arg("label", "claustro.role=mcp-sse"),
-	)
-	containers, err := cli.ContainerList(ctx, containertypes.ListOptions{
-		All:     true,
-		Filters: args,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("listing MCP siblings: %w", err)
 	}
 	return containers, nil
 }
@@ -403,7 +421,7 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 		return nil
 	}
 	_, err = cli.NetworkCreate(ctx, id.NetworkName(), networktypes.CreateOptions{
-		Driver: "bridge",
+		Driver: networkDriver,
 		Labels: id.Labels(),
 	})
 	if err != nil {
@@ -417,7 +435,7 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 func ExecSimple(ctx context.Context, cli *client.Client, containerID string, cmd []string) error {
 	execCfg := containertypes.ExecOptions{
 		Cmd:          cmd,
-		User:         "sandbox",
+		User:         containerUser,
 		Tty:          false,
 		AttachStdout: true,
 		AttachStderr: true,

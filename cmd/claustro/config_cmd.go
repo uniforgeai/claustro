@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,6 +17,9 @@ import (
 	"github.com/uniforgeai/claustro/internal/wizard"
 	"gopkg.in/yaml.v3"
 )
+
+// configFileMode is the file permission used when writing claustro.yaml.
+const configFileMode fs.FileMode = 0o644
 
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -81,12 +85,57 @@ func newConfigSetCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("marshalling config: %w", err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), out, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), out, configFileMode); err != nil {
 				return fmt.Errorf("writing claustro.yaml: %w", err)
 			}
 			fmt.Printf("Set %s = %s\n", args[0], args[1])
 			return nil
 		},
+	}
+}
+
+// multiSelectOption pairs a display label with a value key used by multi-select config forms.
+type multiSelectOption struct {
+	label string
+	value string
+}
+
+// runMultiSelectConfigSection creates and runs a multi-select config subcommand.
+// It handles the common pattern of: read current selections from config, present a
+// multi-select form, then write the selected values back to config via applyFn.
+func runMultiSelectConfigSection(
+	section string,
+	title string,
+	description string,
+	options []multiSelectOption,
+	isEnabled func(*config.Config, string) bool,
+	applyFn func(*config.Config, map[string]bool),
+) func(*config.Config) error {
+	return func(cfg *config.Config) error {
+		selected := make([]string, 0, len(options))
+		huhOpts := make([]huh.Option[string], 0, len(options))
+		for _, opt := range options {
+			if isEnabled(cfg, opt.value) {
+				selected = append(selected, opt.value)
+			}
+			huhOpts = append(huhOpts, huh.NewOption(opt.label, opt.value))
+		}
+
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewMultiSelect[string]().
+					Title(title).
+					Description(description).
+					Options(huhOpts...).
+					Value(&selected),
+			),
+		)
+		if err := form.Run(); err != nil {
+			return fmt.Errorf("%s form: %w", section, err)
+		}
+
+		applyFn(cfg, toSet(selected))
+		return nil
 	}
 }
 
@@ -96,44 +145,24 @@ func newConfigLanguagesCmd() *cobra.Command {
 		Use:   "languages",
 		Short: "Interactively select language runtimes",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConfigSection("languages", func(cfg *config.Config) error {
-				selected := []string{}
-				if cfg.ImageBuild.IsLanguageEnabled("go") {
-					selected = append(selected, "go")
-				}
-				if cfg.ImageBuild.IsLanguageEnabled("rust") {
-					selected = append(selected, "rust")
-				}
-				if cfg.ImageBuild.IsLanguageEnabled("python") {
-					selected = append(selected, "python")
-				}
-
-				form := huh.NewForm(
-					huh.NewGroup(
-						huh.NewMultiSelect[string]().
-							Title("Language runtimes").
-							Description("Select the language runtimes to install in the sandbox image.").
-							Options(
-								huh.NewOption("Go", "go"),
-								huh.NewOption("Rust", "rust"),
-								huh.NewOption("Python", "python"),
-							).
-							Value(&selected),
-					),
-				)
-				if err := form.Run(); err != nil {
-					return fmt.Errorf("languages form: %w", err)
-				}
-
-				sel := toSet(selected)
-				goEnabled := sel["go"]
-				rustEnabled := sel["rust"]
-				pythonEnabled := sel["python"]
-				cfg.ImageBuild.Languages.Go = boolPtr(goEnabled)
-				cfg.ImageBuild.Languages.Rust = boolPtr(rustEnabled)
-				cfg.ImageBuild.Languages.Python = boolPtr(pythonEnabled)
-				return nil
-			})
+			return runConfigSection("languages", runMultiSelectConfigSection(
+				"languages",
+				"Language runtimes",
+				"Select the language runtimes to install in the sandbox image.",
+				[]multiSelectOption{
+					{"Go", "go"},
+					{"Rust", "rust"},
+					{"Python", "python"},
+				},
+				func(cfg *config.Config, key string) bool {
+					return cfg.ImageBuild.IsLanguageEnabled(key)
+				},
+				func(cfg *config.Config, sel map[string]bool) {
+					cfg.ImageBuild.Languages.Go = boolPtr(sel["go"])
+					cfg.ImageBuild.Languages.Rust = boolPtr(sel["rust"])
+					cfg.ImageBuild.Languages.Python = boolPtr(sel["python"])
+				},
+			))
 		},
 	}
 }
@@ -144,38 +173,22 @@ func newConfigToolsCmd() *cobra.Command {
 		Use:   "tools",
 		Short: "Interactively select tool groups",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConfigSection("tools", func(cfg *config.Config) error {
-				selected := []string{}
-				if cfg.ImageBuild.IsToolGroupEnabled("dev") {
-					selected = append(selected, "dev")
-				}
-				if cfg.ImageBuild.IsToolGroupEnabled("build") {
-					selected = append(selected, "build")
-				}
-
-				form := huh.NewForm(
-					huh.NewGroup(
-						huh.NewMultiSelect[string]().
-							Title("Tool groups").
-							Description("Select the tool groups to install in the sandbox image.").
-							Options(
-								huh.NewOption("Dev tools", "dev"),
-								huh.NewOption("Build tools", "build"),
-							).
-							Value(&selected),
-					),
-				)
-				if err := form.Run(); err != nil {
-					return fmt.Errorf("tools form: %w", err)
-				}
-
-				sel := toSet(selected)
-				devEnabled := sel["dev"]
-				buildEnabled := sel["build"]
-				cfg.ImageBuild.Tools.Dev = boolPtr(devEnabled)
-				cfg.ImageBuild.Tools.Build = boolPtr(buildEnabled)
-				return nil
-			})
+			return runConfigSection("tools", runMultiSelectConfigSection(
+				"tools",
+				"Tool groups",
+				"Select the tool groups to install in the sandbox image.",
+				[]multiSelectOption{
+					{"Dev tools", "dev"},
+					{"Build tools", "build"},
+				},
+				func(cfg *config.Config, key string) bool {
+					return cfg.ImageBuild.IsToolGroupEnabled(key)
+				},
+				func(cfg *config.Config, sel map[string]bool) {
+					cfg.ImageBuild.Tools.Dev = boolPtr(sel["dev"])
+					cfg.ImageBuild.Tools.Build = boolPtr(sel["build"])
+				},
+			))
 		},
 	}
 }
@@ -186,44 +199,24 @@ func newConfigMCPCmd() *cobra.Command {
 		Use:   "mcp",
 		Short: "Interactively select MCP servers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConfigSection("mcp", func(cfg *config.Config) error {
-				selected := []string{}
-				if cfg.ImageBuild.IsMCPServerEnabled("filesystem") {
-					selected = append(selected, "filesystem")
-				}
-				if cfg.ImageBuild.IsMCPServerEnabled("memory") {
-					selected = append(selected, "memory")
-				}
-				if cfg.ImageBuild.IsMCPServerEnabled("fetch") {
-					selected = append(selected, "fetch")
-				}
-
-				form := huh.NewForm(
-					huh.NewGroup(
-						huh.NewMultiSelect[string]().
-							Title("Built-in MCP servers").
-							Description("Select the built-in MCP servers to install in the sandbox image.").
-							Options(
-								huh.NewOption("Filesystem", "filesystem"),
-								huh.NewOption("Memory", "memory"),
-								huh.NewOption("Fetch", "fetch"),
-							).
-							Value(&selected),
-					),
-				)
-				if err := form.Run(); err != nil {
-					return fmt.Errorf("mcp form: %w", err)
-				}
-
-				sel := toSet(selected)
-				fsEnabled := sel["filesystem"]
-				memEnabled := sel["memory"]
-				fetchEnabled := sel["fetch"]
-				cfg.ImageBuild.MCPServers.Filesystem = boolPtr(fsEnabled)
-				cfg.ImageBuild.MCPServers.Memory = boolPtr(memEnabled)
-				cfg.ImageBuild.MCPServers.Fetch = boolPtr(fetchEnabled)
-				return nil
-			})
+			return runConfigSection("mcp", runMultiSelectConfigSection(
+				"mcp",
+				"Built-in MCP servers",
+				"Select the built-in MCP servers to install in the sandbox image.",
+				[]multiSelectOption{
+					{"Filesystem", "filesystem"},
+					{"Memory", "memory"},
+					{"Fetch", "fetch"},
+				},
+				func(cfg *config.Config, key string) bool {
+					return cfg.ImageBuild.IsMCPServerEnabled(key)
+				},
+				func(cfg *config.Config, sel map[string]bool) {
+					cfg.ImageBuild.MCPServers.Filesystem = boolPtr(sel["filesystem"])
+					cfg.ImageBuild.MCPServers.Memory = boolPtr(sel["memory"])
+					cfg.ImageBuild.MCPServers.Fetch = boolPtr(sel["fetch"])
+				},
+			))
 		},
 	}
 }
@@ -356,7 +349,7 @@ func runConfigSection(section string, editor func(*config.Config) error) error {
 	if err != nil {
 		return fmt.Errorf("marshalling config: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), data, configFileMode); err != nil {
 		return fmt.Errorf("writing claustro.yaml: %w", err)
 	}
 	fmt.Printf("Updated %s configuration\n", section)

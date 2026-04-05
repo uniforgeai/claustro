@@ -12,6 +12,15 @@ import (
 	"strings"
 )
 
+// Label key constants used across packages for Docker container labels.
+const (
+	LabelProject   = "claustro.project"
+	LabelName      = "claustro.name"
+	LabelRole      = "claustro.role"
+	LabelManaged   = "claustro.managed"
+	LabelMCPServer = "claustro.mcp-server"
+)
+
 var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
 
 // Identity holds the resolved sandbox identity and all derived Docker resource names.
@@ -73,7 +82,7 @@ func (id *Identity) NetworkName() string {
 
 // NetworkNameFromLabels derives the network name for a container identified by its labels.
 func NetworkNameFromLabels(labels map[string]string) string {
-	return fmt.Sprintf("claustro-%s_%s_net", labels["claustro.project"], labels["claustro.name"])
+	return fmt.Sprintf("claustro-%s_%s_net", labels[LabelProject], labels[LabelName])
 }
 
 // VolumeName returns the Docker volume name for the given purpose.
@@ -98,16 +107,16 @@ func (id *Identity) MCPContainerName(serverName string) string {
 // Includes the base sandbox labels plus MCP-specific role and server name.
 func (id *Identity) MCPLabels(serverName string) map[string]string {
 	labels := id.Labels()
-	labels["claustro.role"] = "mcp-sse"
-	labels["claustro.mcp-server"] = serverName
+	labels[LabelRole] = "mcp-sse"
+	labels[LabelMCPServer] = serverName
 	return labels
 }
 
 // Labels returns the Docker labels to apply to all resources for this sandbox.
 func (id *Identity) Labels() map[string]string {
 	return map[string]string{
-		"claustro.managed": "true",
-		"claustro.project": id.Project,
-		"claustro.name":    id.Name,
+		LabelManaged: "true",
+		LabelProject: id.Project,
+		LabelName:    id.Name,
 	}
 }

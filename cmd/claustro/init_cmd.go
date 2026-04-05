@@ -32,87 +32,17 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize a claustro.yaml config in the current directory",
 		Long:  "Run the interactive wizard (or apply flags directly) to create a claustro.yaml configuration file.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
-			}
-
-			cfgPath := filepath.Join(cwd, "claustro.yaml")
-
-			// Check if claustro.yaml already exists.
-			if _, err := os.Stat(cfgPath); err == nil {
-				if !flagYes {
-					var overwrite bool
-					confirmForm := huh.NewForm(
-						huh.NewGroup(
-							huh.NewConfirm().
-								Title("claustro.yaml already exists. Overwrite?").
-								Value(&overwrite),
-						),
-					)
-					if runErr := confirmForm.Run(); runErr != nil {
-						return fmt.Errorf("prompt error: %w", runErr)
-					}
-					if !overwrite {
-						fmt.Println("Aborted.")
-						return nil
-					}
-				}
-			}
-
-			// Build default options from directory basename.
-			project := filepath.Base(cwd)
-			opts := wizard.DefaultOptions(project)
-
-			// Apply flag overrides (only if the flag was explicitly set).
-			if cmd.Flags().Changed("project") {
-				opts.Project = flagProject
-			}
-			if cmd.Flags().Changed("languages") {
-				opts.Languages = splitCSV(flagLanguages)
-			}
-			if cmd.Flags().Changed("tools") {
-				opts.Tools = splitCSV(flagTools)
-			}
-			if cmd.Flags().Changed("mcp") {
-				opts.MCPServers = splitCSV(flagMCP)
-			}
-			if cmd.Flags().Changed("cpus") {
-				opts.CPUs = flagCPUs
-			}
-			if cmd.Flags().Changed("memory") {
-				opts.Memory = flagMemory
-			}
-			if cmd.Flags().Changed("firewall") {
-				opts.Firewall = flagFirewall
-			}
-			if cmd.Flags().Changed("readonly") {
-				opts.ReadOnly = flagReadOnly
-			}
-
-			// Run interactive wizard if not in --yes mode.
-			if !flagYes {
-				wizardErr := runWizard(&opts)
-				if wizardErr != nil {
-					return fmt.Errorf("wizard error: %w", wizardErr)
-				}
-			}
-
-			// Build and marshal config.
-			cfg := wizard.BuildConfig(opts)
-			data, err := wizard.MarshalConfig(cfg)
-			if err != nil {
-				return fmt.Errorf("marshaling config: %w", err)
-			}
-
-			if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
-				return fmt.Errorf("writing claustro.yaml: %w", err)
-			}
-
-			fmt.Printf("Created %s\n", cfgPath)
-			fmt.Printf("  Project: %s\n", opts.Project)
-			fmt.Printf("  Run: claustro up\n")
-			return nil
+			return runInitFlow(cmd, initFlags{
+				project:   flagProject,
+				languages: flagLanguages,
+				tools:     flagTools,
+				mcp:       flagMCP,
+				cpus:      flagCPUs,
+				memory:    flagMemory,
+				firewall:  flagFirewall,
+				readOnly:  flagReadOnly,
+				yes:       flagYes,
+			})
 		},
 	}
 
@@ -127,6 +57,105 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&flagYes, "yes", "y", false, "Non-interactive: apply defaults and flag overrides without prompting")
 
 	return cmd
+}
+
+// initFlags holds the parsed flag values for the init command.
+type initFlags struct {
+	project   string
+	languages string
+	tools     string
+	mcp       string
+	cpus      string
+	memory    string
+	firewall  bool
+	readOnly  bool
+	yes       bool
+}
+
+// runInitFlow orchestrates the init wizard: checks for existing config, applies flag
+// overrides, optionally runs the interactive wizard, then writes claustro.yaml.
+func runInitFlow(cmd *cobra.Command, flags initFlags) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting working directory: %w", err)
+	}
+
+	cfgPath := filepath.Join(cwd, "claustro.yaml")
+
+	// Check if claustro.yaml already exists.
+	if _, err := os.Stat(cfgPath); err == nil {
+		if !flags.yes {
+			var overwrite bool
+			confirmForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("claustro.yaml already exists. Overwrite?").
+						Value(&overwrite),
+				),
+			)
+			if runErr := confirmForm.Run(); runErr != nil {
+				return fmt.Errorf("prompt error: %w", runErr)
+			}
+			if !overwrite {
+				fmt.Println("Aborted.")
+				return nil
+			}
+		}
+	}
+
+	// Build default options from directory basename.
+	project := filepath.Base(cwd)
+	opts := wizard.DefaultOptions(project)
+
+	// Apply flag overrides (only if the flag was explicitly set).
+	if cmd.Flags().Changed("project") {
+		opts.Project = flags.project
+	}
+	if cmd.Flags().Changed("languages") {
+		opts.Languages = splitCSV(flags.languages)
+	}
+	if cmd.Flags().Changed("tools") {
+		opts.Tools = splitCSV(flags.tools)
+	}
+	if cmd.Flags().Changed("mcp") {
+		opts.MCPServers = splitCSV(flags.mcp)
+	}
+	if cmd.Flags().Changed("cpus") {
+		opts.CPUs = flags.cpus
+	}
+	if cmd.Flags().Changed("memory") {
+		opts.Memory = flags.memory
+	}
+	if cmd.Flags().Changed("firewall") {
+		opts.Firewall = flags.firewall
+	}
+	if cmd.Flags().Changed("readonly") {
+		opts.ReadOnly = flags.readOnly
+	}
+
+	// Run interactive wizard if not in --yes mode.
+	if !flags.yes {
+		wizardErr := runWizard(&opts)
+		if wizardErr != nil {
+			return fmt.Errorf("wizard error: %w", wizardErr)
+		}
+	}
+
+	// Build and marshal config.
+	cfg := wizard.BuildConfig(opts)
+	data, err := wizard.MarshalConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+
+	if err := os.WriteFile(cfgPath, data, configFileMode); err != nil {
+		return fmt.Errorf("writing claustro.yaml: %w", err)
+	}
+
+	fmt.Printf("Created %s\n", cfgPath)
+	fmt.Printf("  Project: %s\n", opts.Project)
+	fmt.Printf("  Run: claustro up\n")
+	return nil
 }
 
 // runWizard runs the interactive huh wizard and updates opts in place.

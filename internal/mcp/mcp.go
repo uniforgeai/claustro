@@ -11,8 +11,18 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 )
 
-// MCPConfigPath is the path inside the container where Claude Code reads MCP config.
-const MCPConfigPath = "/home/sandbox/.claude/mcp.json"
+const (
+	// MCPConfigPath is the path inside the container where Claude Code reads MCP config.
+	MCPConfigPath = "/home/sandbox/.claude/mcp.json"
+
+	// heredocDelimiter is the delimiter used in shell heredocs when writing MCP config files.
+	heredocDelimiter = "CLAUSTRO_MCP_EOF"
+
+	// MCP package names for pre-installed servers.
+	pkgFilesystem = "@modelcontextprotocol/server-filesystem"
+	pkgMemory     = "@modelcontextprotocol/server-memory"
+	pkgFetch      = "mcp-server-fetch"
+)
 
 // StdioServer represents a single stdio MCP server entry in mcp.json.
 type StdioServer struct {
@@ -45,14 +55,14 @@ func DefaultConfig() Config {
 		MCPServers: map[string]ServerEntry{
 			"filesystem": {
 				Command: "npx",
-				Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/workspace"},
+				Args:    []string{"-y", pkgFilesystem, "/workspace"},
 			},
 			"memory": {
 				Command: "npx",
-				Args:    []string{"-y", "@modelcontextprotocol/server-memory"},
+				Args:    []string{"-y", pkgMemory},
 			},
 			"fetch": {
-				Command: "mcp-server-fetch",
+				Command: pkgFetch,
 				Args:    nil,
 			},
 		},
@@ -110,6 +120,6 @@ func WriteCommand(cfg Config, path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	script := fmt.Sprintf("cat > %s << 'CLAUSTRO_MCP_EOF'\n%s\nCLAUSTRO_MCP_EOF", path, string(data))
+	script := fmt.Sprintf("cat > %s << '%s'\n%s\n%s", path, heredocDelimiter, string(data), heredocDelimiter)
 	return []string{"sh", "-c", script}, nil
 }
