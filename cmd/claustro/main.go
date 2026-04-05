@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/uniforgeai/claustro/internal/updater"
 )
 
 var (
@@ -25,7 +26,27 @@ safely against local source code. Source stays on the host (bind-mounted),
 containers are cheap to burn and respawn.`,
 	}
 	setupCommands(rootCmd)
-	if err := rootCmd.Execute(); err != nil {
+
+	// Start background update check.
+	reminderCh := make(chan string, 1)
+	go func() {
+		reminderCh <- updater.CheckAndRemind(version)
+	}()
+
+	err := rootCmd.Execute()
+
+	// Print update reminder if available (non-blocking select).
+	select {
+	case msg := <-reminderCh:
+		if msg != "" {
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, msg)
+		}
+	default:
+		// Check not done yet, don't block.
+	}
+
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
