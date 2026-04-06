@@ -1,15 +1,15 @@
 // This file is licensed under the Business Source License 1.1. See the LICENSE file for details.
 // Copyright (c) 2026 Uniforge GmbH. All rights reserved.
 
-//go:build !darwin
+//go:build !(darwin || (linux && cgo))
 
 package audio
 
 import "errors"
 
-// NewCapturer returns a stub capturer on unsupported platforms.
-// On Linux this is a temporary stub until ALSA support is added (Task 5).
-// The build tag will be narrowed to !darwin && !linux once capture_linux.go exists.
+// NewCapturer returns a stub capturer on platforms without audio support.
+// On macOS, capture_darwin.go provides CoreAudio. On Linux with CGO,
+// capture_linux.go provides ALSA. This stub covers everything else.
 func NewCapturer() Capturer {
 	return &stubCapturer{}
 }
