@@ -38,7 +38,7 @@ When a string, uses that image directly. When a mapping, configures the built im
 |-------|------|---------|-------------|
 | `dev` | bool | true | ripgrep, fd, fzf, jq, tree, htop, tmux |
 | `build` | bool | true | gcc, make, pkg-config, libssl-dev |
-| `voice` | bool | false | SoX + audio libraries for Claude Code `/voice` command (opt-in) |
+| `voice` | bool | false | SoX + audio bridge for Claude Code `/voice` command (opt-in). Enables host microphone passthrough into containers. |
 
 ### image.mcp_servers
 

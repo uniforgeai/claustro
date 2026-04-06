@@ -565,6 +565,8 @@ The system SHALL optionally support Claude Code's voice mode in sandbox containe
 - **WHEN** `tools.voice` is set to `true` in `claustro.yaml`
 - **THEN** the image includes SoX, libsox-fmt-all, alsa-utils, and pulseaudio-utils
 - **AND** Claude Code's `/voice` command can function inside the container
+- **AND** the audio bridge streams host microphone audio into the container via socket
+- **AND** container-side `rec`/`arecord` shims connect to the bridge for recording
 
 ---
 
