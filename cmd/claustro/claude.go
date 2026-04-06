@@ -84,7 +84,7 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 		return errNotRunning(id)
 	}
 
-	cfg, _ := config.Load(".")
+	cfg, _ := config.Load(id.HostPath)
 	voiceEnabled := cfg != nil && cfg.ImageBuild.IsToolGroupEnabled("voice")
 
 	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, extraArgs...)
