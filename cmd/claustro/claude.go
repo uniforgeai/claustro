@@ -84,14 +84,10 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 		return errNotRunning(id)
 	}
 
-	cfg, _ := config.Load(id.HostPath)
-	voiceEnabled := cfg != nil && cfg.ImageBuild.IsToolGroupEnabled("voice")
-
 	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, extraArgs...)
 	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
 	return container.Exec(ctx, cli, c.ID, execCmd, container.ExecOptions{
 		Interactive:      true,
 		ClipboardSockDir: sockDir,
-		VoiceMode:        voiceEnabled,
 	})
 }

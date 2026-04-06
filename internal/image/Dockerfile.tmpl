@@ -30,10 +30,6 @@ RUN apt-get update && apt-get install -y \
     alsa-utils \
     pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*
-# Audio bridge shims — shadow rec/arecord to capture from host mic
-COPY rec-shim /usr/local/bin/rec
-COPY arecord-shim /usr/local/bin/arecord
-RUN chmod +x /usr/local/bin/rec /usr/local/bin/arecord
 {{end}}
 # Install Node.js LTS
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
@@ -107,14 +103,6 @@ RUN mkdir -p /home/sandbox/.cargo /home/sandbox/.rustup \
 RUN curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh \
     && su sandbox -s /bin/bash /tmp/claude-install.sh \
     && rm -f /tmp/claude-install.sh
-{{if .VoiceMode}}
-# Disable Claude Code's native audio capture module so the fallback chain
-# reaches our rec/arecord shims. The native module loads inside the container
-# but cannot access hardware audio devices — removing it forces Claude Code
-# to use rec (our bridge shim) which streams audio from the host microphone.
-RUN find /home/sandbox/.local/share/claude -name "audio-capture" -type d \
-    -exec sh -c 'mv "$1" "$1.disabled"' _ {} \; 2>/dev/null || true
-{{end}}
 
 # Pre-create npm and pip cache dirs owned by sandbox
 RUN mkdir -p /home/sandbox/.npm /home/sandbox/.cache/pip \

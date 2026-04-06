@@ -564,9 +564,13 @@ The system SHALL optionally support Claude Code's voice mode in sandbox containe
 
 - **WHEN** `tools.voice` is set to `true` in `claustro.yaml`
 - **THEN** the image includes SoX, libsox-fmt-all, alsa-utils, and pulseaudio-utils
-- **AND** Claude Code's `/voice` command can function inside the container
-- **AND** the audio bridge streams host microphone audio into the container via socket
-- **AND** container-side `rec`/`arecord` shims connect to the bridge for recording
+
+> **Known limitation:** Voice mode (`/voice`) does not currently work inside containers.
+> Docker containers have no access to the host microphone. On macOS, Docker runs in a
+> Linux VM with no audio device at all. A proof-of-concept audio bridge (host-side
+> CoreAudio capture → TCP socket → container-side `rec` shim) was attempted but could
+> not reliably intercept Claude Code's native audio capture module fallback chain.
+> See `docs/specs/2026-04-06-audio-passthrough-design.md` for the design that was explored.
 
 ---
 
