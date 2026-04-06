@@ -524,6 +524,50 @@ The system SHALL remain fully compliant with Anthropic's Terms of Service.
 
 ---
 
+### Requirement: Version and Update
+
+The system SHALL provide version information and self-update capabilities.
+
+#### Scenario: Version command
+
+- **WHEN** the user runs `claustro version`
+- **THEN** the version, commit hash, and build date are displayed
+- **AND** version info is injected at build time via ldflags
+
+#### Scenario: Update command
+
+- **WHEN** the user runs `claustro update`
+- **THEN** the install method is auto-detected (Homebrew, go install, or binary download)
+- **AND** the appropriate update mechanism is invoked
+- **AND** if the method is unknown, a link to GitHub releases is shown
+
+#### Scenario: Background update reminder
+
+- **WHEN** any claustro command is executed
+- **THEN** a non-blocking background check for newer versions runs
+- **AND** the check result is cached for 24 hours in `~/.config/claustro/update-check.json`
+- **AND** if a newer version is available, a reminder is printed to stderr after command completion
+- **AND** development builds are never nagged
+
+---
+
+### Requirement: Voice Mode Support
+
+The system SHALL optionally support Claude Code's voice mode in sandbox containers.
+
+#### Scenario: Voice mode disabled (default)
+
+- **WHEN** `tools.voice` is not set or set to `false` in `claustro.yaml`
+- **THEN** SoX and audio libraries are not installed in the image
+
+#### Scenario: Voice mode enabled
+
+- **WHEN** `tools.voice` is set to `true` in `claustro.yaml`
+- **THEN** the image includes SoX, libsox-fmt-all, alsa-utils, and pulseaudio-utils
+- **AND** Claude Code's `/voice` command can function inside the container
+
+---
+
 ## Implementation
 
 ### Requirement: Go Implementation
@@ -576,7 +620,7 @@ The system SHALL be implemented in Go.
 3. **Plugin/extension model** — should `claustro.yaml` support custom Dockerfile snippets or just image overrides?
 4. **Connect to project network** — optional flag to attach the sandbox to the project's compose network so Claude can talk to the project's dev services?
 5. **GPU passthrough** — should we support `--gpu` for local model inference via Docker Model Runner?
-6. **Update mechanism** — how does the user update Claude Code inside the image? Rebuild only, or an `upgrade` command?
+6. ~~**Update mechanism**~~ — resolved: `claustro update` auto-detects install method (Homebrew, go install, binary) with background 24h update reminders
 
 ---
 
@@ -607,3 +651,9 @@ The system SHALL be implemented in Go.
 - `claustro.yaml` validation and schema
 - GitHub Actions: CI test pipeline
 - GitHub Actions: release automation and versioning
+
+### M5: Version, Update + Voice Mode
+- `claustro version` command with build-time ldflags (version, commit, date)
+- `claustro update` command with install method detection (Homebrew, go install, binary)
+- Background update reminder with 24h check interval (non-blocking, cached in `~/.config/claustro/`)
+- Voice mode support: optional SoX installation in sandbox image for Claude Code `/voice` command

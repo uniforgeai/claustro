@@ -63,3 +63,4 @@ internal/mcp        → MCP server lifecycle (stdio pre-install, SSE sibling con
 | M2 | Multi-sandbox + `claustro.yaml` config, `--workdir`, `--mount`, `.env` support |
 | M3 | Egress firewall (iptables), stdio MCP pre-install, SSE MCP sibling containers |
 | M4 | Distribution: Homebrew formula, cross-platform binaries, docs site, CI/CD (GitHub Actions for tests, release, versioning) |
+| M5 | Version + update commands, background update reminder, voice mode (SoX) support in sandbox image |

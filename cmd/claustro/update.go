@@ -17,27 +17,28 @@ func newUpdateCmd() *cobra.Command {
 		Long:  "Detects the installation method and updates claustro accordingly.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			method := updater.DetectMethod()
+			w := cmd.OutOrStdout()
 
 			switch method {
 			case updater.MethodHomebrew:
-				fmt.Fprintln(cmd.OutOrStdout(), "Detected install method: Homebrew")
+				_, _ = fmt.Fprintln(w, "Detected install method: Homebrew")
 			case updater.MethodGoInstall:
-				fmt.Fprintln(cmd.OutOrStdout(), "Detected install method: go install")
+				_, _ = fmt.Fprintln(w, "Detected install method: go install")
 			default:
-				fmt.Fprintln(cmd.OutOrStdout(), "Detected install method: unknown")
+				_, _ = fmt.Fprintln(w, "Detected install method: unknown")
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Current version: %s\n", version)
-			fmt.Fprintln(cmd.OutOrStdout(), "Updating...")
+			_, _ = fmt.Fprintf(w, "Current version: %s\n", version)
+			_, _ = fmt.Fprintln(w, "Updating...")
 
 			msg, err := updater.Update(method, version)
 			if err != nil {
 				return err
 			}
 			if msg != "" {
-				fmt.Fprintln(cmd.OutOrStdout(), msg)
+				_, _ = fmt.Fprintln(w, msg)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Update complete.")
+			_, _ = fmt.Fprintln(w, "Update complete.")
 			return nil
 		},
 	}

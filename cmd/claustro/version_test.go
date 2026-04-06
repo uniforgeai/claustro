@@ -38,7 +38,7 @@ func TestVersionCmd_Format(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.Run = func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "claustro %s (commit: %s, built: %s)\n", version, commit, date)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "claustro %s (commit: %s, built: %s)\n", version, commit, date)
 	}
 	err := cmd.Execute()
 	require.NoError(t, err)
