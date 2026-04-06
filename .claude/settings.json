@@ -1,3 +1,18 @@
 {
-  "plansDirectory": "./.plans"
+  "plansDirectory": "./.plans",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/workspace/.claude/hooks/go-check.sh",
+            "timeout": 120,
+            "statusMessage": "Running Go build/test/lint..."
+          }
+        ]
+      }
+    ]
+  }
 }
