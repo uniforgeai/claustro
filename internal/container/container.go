@@ -218,6 +218,9 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		execCfg.Env = append(termEnv(), gitEnv()...)
 		execCfg.Env = append(execCfg.Env, audioEnv...)
 	}
+	if len(audioEnv) > 0 {
+		slog.Info("audio bridge env injected into exec", "env", audioEnv)
+	}
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
 	if err != nil {
