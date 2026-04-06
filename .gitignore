@@ -20,6 +20,15 @@ vendor/
 coverage.out
 coverage.html
 
+# Audio bridge shim binaries (built by make build-shims, embedded via go:embed)
+internal/image/rec-shim
+internal/image/arecord-shim
+
+# Stray binaries in project root (from go build without -o)
+/claustro
+/rec-shim
+/arecord-shim
+
 # macOS
 .DS_Store
 
