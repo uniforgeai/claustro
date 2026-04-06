@@ -35,6 +35,12 @@ var xclipShim []byte
 //go:embed wl-paste-shim
 var wlPasteShim []byte
 
+//go:embed rec-shim
+var recShim []byte
+
+//go:embed arecord-shim
+var arecordShim []byte
+
 const ImageName = "claustro:latest"
 
 // EnsureBuilt checks whether the claustro image exists and builds it if not.
@@ -106,6 +112,20 @@ func buildContext(imgCfg *config.ImageBuildConfig) ([]byte, error) {
 		{"claustro-init", initScript, 0755},
 		{"xclip-shim", xclipShim, 0755},
 		{"wl-paste-shim", wlPasteShim, 0755},
+	}
+	if imgCfg.IsToolGroupEnabled("voice") {
+		files = append(files,
+			struct {
+				name string
+				data []byte
+				mode int64
+			}{"rec-shim", recShim, 0755},
+			struct {
+				name string
+				data []byte
+				mode int64
+			}{"arecord-shim", arecordShim, 0755},
+		)
 	}
 
 	for _, f := range files {

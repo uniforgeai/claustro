@@ -30,6 +30,10 @@ RUN apt-get update && apt-get install -y \
     alsa-utils \
     pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*
+# Audio bridge shims — shadow rec/arecord to capture from host mic
+COPY rec-shim /usr/local/bin/rec
+COPY arecord-shim /usr/local/bin/arecord
+RUN chmod +x /usr/local/bin/rec /usr/local/bin/arecord
 {{end}}
 # Install Node.js LTS
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
