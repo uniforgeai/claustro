@@ -72,6 +72,7 @@ func runDoctor(ctx context.Context) error {
 	results = append(results, doctor.CheckSSHAgent())
 	results = append(results, doctor.CheckGitHubCLI())
 	results = append(results, doctor.CheckClipboard())
+	results = append(results, doctor.CheckVoiceMode())
 	results = append(results, doctor.CheckConfigFile("."))
 
 	// Format output.

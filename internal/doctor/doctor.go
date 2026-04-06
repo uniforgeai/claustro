@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/audio"
 	"github.com/uniforgeai/claustro/internal/config"
 )
 
@@ -390,5 +391,29 @@ func CheckConfigFile(dir string) CheckResult {
 		Name:   name,
 		Status: Pass,
 		Detail: configPath,
+	}
+}
+
+// CheckVoiceMode verifies that audio capture is available for voice mode.
+func CheckVoiceMode() CheckResult {
+	capturer := audio.NewCapturer()
+	if err := capturer.Available(); err != nil {
+		fixHint := "Audio capture is not available on this platform."
+		if runtime.GOOS == "darwin" {
+			fixHint = "Check System Settings > Privacy & Security > Microphone and allow claustro."
+		} else if runtime.GOOS == "linux" {
+			fixHint = "Ensure libasound2 is installed and a capture device is available (arecord -l)."
+		}
+		return CheckResult{
+			Name:    "Voice mode",
+			Status:  Warn,
+			Detail:  err.Error(),
+			FixHint: fixHint,
+		}
+	}
+	return CheckResult{
+		Name:   "Voice mode",
+		Status: Pass,
+		Detail: "microphone accessible",
 	}
 }
