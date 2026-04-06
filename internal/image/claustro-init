@@ -48,5 +48,18 @@ for dir in /home/sandbox/.npm /home/sandbox/.cache/pip; do
     fi
 done
 
+# When the audio bridge rec shim is installed, disable Claude Code's native
+# audio capture module so the fallback chain reaches our shim. The native module
+# loads inside the container but cannot access hardware — disabling it forces
+# Claude Code to use rec (our bridge shim) which streams from the host mic.
+# This runs on every start to catch Claude Code auto-updates that restore the module.
+if [ -x /usr/local/bin/rec ] && file /usr/local/bin/rec 2>/dev/null | grep -q ELF; then
+    for audiodir in /home/sandbox/.local/share/claude/versions/*/vendor/audio-capture; do
+        if [ -d "$audiodir" ]; then
+            mv "$audiodir" "${audiodir}.disabled" 2>/dev/null || true
+        fi
+    done
+fi
+
 # Hand off to sandbox user, running the provided command
 exec su -s /bin/sh sandbox -c "$(printf '%s ' "$@")"
