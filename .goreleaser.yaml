@@ -11,14 +11,26 @@ before:
     - go test ./...
 
 builds:
-  - id: claustro
+  - id: claustro-darwin
+    main: ./cmd/claustro
+    binary: claustro
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+
+  - id: claustro-linux
     main: ./cmd/claustro
     binary: claustro
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - arm64
@@ -28,7 +40,8 @@ builds:
 archives:
   - id: claustro
     builds:
-      - claustro
+      - claustro-darwin
+      - claustro-linux
     format_overrides:
       - goos: darwin
         format: zip
