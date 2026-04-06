@@ -25,6 +25,7 @@ import (
 	networktypes "github.com/docker/docker/api/types/network"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/uniforgeai/claustro/internal/audio"
 	"github.com/uniforgeai/claustro/internal/clipboard"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
@@ -192,6 +193,8 @@ type ExecOptions struct {
 	// be created. When non-empty and Interactive is true, a clipboard server is
 	// started for the duration of the exec session.
 	ClipboardSockDir string
+	// VoiceMode enables the audio bridge for voice input when Interactive is true.
+	VoiceMode bool
 }
 
 // Exec runs a command inside a running container.
@@ -205,12 +208,16 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		User:         containerUser,
 		WorkingDir:   containerWorkdir,
 	}
-	if opts.Interactive {
-		execCfg.Env = append(termEnv(), gitEnv()...)
-	}
-
 	cleanup := setupClipboardBridge(opts)
 	defer cleanup()
+
+	audioCleanup, audioEnv := setupAudioBridge(opts)
+	defer audioCleanup()
+
+	if opts.Interactive {
+		execCfg.Env = append(termEnv(), gitEnv()...)
+		execCfg.Env = append(execCfg.Env, audioEnv...)
+	}
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
 	if err != nil {
@@ -265,6 +272,49 @@ func setupClipboardBridge(opts ExecOptions) func() {
 		}
 	}
 	return func() { srv.Close() } //nolint:errcheck
+}
+
+// setupAudioBridge starts an audio bridge server for interactive voice sessions.
+// It returns a cleanup function and environment variables to inject into the exec.
+// On macOS, TCP is used because Unix sockets are not reachable from inside Docker's
+// Linux VM.
+func setupAudioBridge(opts ExecOptions) (func(), []string) {
+	noop := func() {}
+	if !opts.Interactive || !opts.VoiceMode || opts.ClipboardSockDir == "" {
+		return noop, nil
+	}
+
+	capturer := audio.NewCapturer()
+	if err := capturer.Available(); err != nil {
+		slog.Warn("audio bridge unavailable", "err", err)
+		return noop, nil
+	}
+
+	srv := audio.NewServer(capturer)
+	var env []string
+
+	if runtime.GOOS == "darwin" {
+		port, err := srv.StartTCP(opts.ClipboardSockDir)
+		if err != nil {
+			slog.Warn("audio bridge TCP start failed", "err", err)
+			return noop, nil
+		}
+		env = []string{
+			"CLAUSTRO_AUDIO_HOST=host.docker.internal",
+			"CLAUSTRO_AUDIO_PORT=" + strconv.Itoa(port),
+		}
+	} else {
+		sockPath := filepath.Join(opts.ClipboardSockDir, audio.SockFileName)
+		if err := srv.Start(sockPath); err != nil {
+			slog.Warn("audio bridge socket start failed", "err", err)
+			return noop, nil
+		}
+		env = []string{
+			"CLAUSTRO_AUDIO_SOCK=/run/claustro/" + audio.SockFileName,
+		}
+	}
+
+	return func() { _ = srv.Close() }, env
 }
 
 // setupInteractiveSession configures raw terminal mode, initial PTY sizing,
