@@ -21,6 +21,11 @@ import (
 )
 
 func main() {
+	debug := os.Getenv("CLAUSTRO_AUDIO_DEBUG") != ""
+	if debug {
+		fmt.Fprintf(os.Stderr, "rec-shim: args=%v\n", os.Args)
+	}
+
 	outFile := parseOutputFile(os.Args)
 	if outFile == "" {
 		fmt.Fprintln(os.Stderr, "rec-shim: no output file specified")
@@ -30,6 +35,9 @@ func main() {
 	sockPath := os.Getenv("CLAUSTRO_AUDIO_SOCK")
 	host := os.Getenv("CLAUSTRO_AUDIO_HOST")
 	portStr := os.Getenv("CLAUSTRO_AUDIO_PORT")
+	if debug {
+		fmt.Fprintf(os.Stderr, "rec-shim: sock=%q host=%q port=%q out=%q\n", sockPath, host, portStr, outFile)
+	}
 
 	var port int
 	if portStr != "" {
@@ -129,6 +137,9 @@ func recordToWAV(sockPath, host string, port int, outFile string) error {
 	defer f.Close()
 
 	pcmData := pcmBuf.Bytes()
+	if os.Getenv("CLAUSTRO_AUDIO_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "rec-shim: writing WAV to %s (%d bytes PCM)\n", outFile, len(pcmData))
+	}
 	if err := audio.WriteWAVHeader(f, uint32(len(pcmData))); err != nil {
 		return fmt.Errorf("writing WAV header: %w", err)
 	}

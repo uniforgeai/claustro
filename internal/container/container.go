@@ -281,12 +281,13 @@ func setupClipboardBridge(opts ExecOptions) func() {
 func setupAudioBridge(opts ExecOptions) (func(), []string) {
 	noop := func() {}
 	if !opts.Interactive || !opts.VoiceMode || opts.ClipboardSockDir == "" {
+		slog.Debug("audio bridge skipped", "interactive", opts.Interactive, "voiceMode", opts.VoiceMode, "sockDir", opts.ClipboardSockDir)
 		return noop, nil
 	}
 
 	capturer := audio.NewCapturer()
 	if err := capturer.Available(); err != nil {
-		slog.Warn("audio bridge unavailable", "err", err)
+		slog.Warn("audio bridge unavailable — voice mode will not work", "err", err)
 		return noop, nil
 	}
 
@@ -299,6 +300,7 @@ func setupAudioBridge(opts ExecOptions) (func(), []string) {
 			slog.Warn("audio bridge TCP start failed", "err", err)
 			return noop, nil
 		}
+		slog.Info("audio bridge started", "transport", "tcp", "port", port)
 		env = []string{
 			"CLAUSTRO_AUDIO_HOST=host.docker.internal",
 			"CLAUSTRO_AUDIO_PORT=" + strconv.Itoa(port),
@@ -309,6 +311,7 @@ func setupAudioBridge(opts ExecOptions) (func(), []string) {
 			slog.Warn("audio bridge socket start failed", "err", err)
 			return noop, nil
 		}
+		slog.Info("audio bridge started", "transport", "unix", "socket", sockPath)
 		env = []string{
 			"CLAUSTRO_AUDIO_SOCK=/run/claustro/" + audio.SockFileName,
 		}
