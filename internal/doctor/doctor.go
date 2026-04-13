@@ -392,3 +392,4 @@ func CheckConfigFile(dir string) CheckResult {
 		Detail: configPath,
 	}
 }
+

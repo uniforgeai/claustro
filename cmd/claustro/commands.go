@@ -20,4 +20,6 @@ func setupCommands(root *cobra.Command) {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newValidateCmd())
 	root.AddCommand(newConfigCmd())
+	root.AddCommand(newVersionCmd())
+	root.AddCommand(newUpdateCmd())
 }

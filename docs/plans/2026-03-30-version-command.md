@@ -1,6 +1,6 @@
 # Version Command
 
-**Status:** TODO
+**Status:** DONE
 **Date:** 2026-03-30
 
 ## Problem

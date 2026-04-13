@@ -27,6 +27,7 @@ image:
   tools:
     dev: true
     build: true
+    voice: false
   mcp_servers:
     filesystem: true
     memory: true

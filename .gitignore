@@ -20,6 +20,9 @@ vendor/
 coverage.out
 coverage.html
 
+# Stray binaries in project root (from go build without -o)
+/claustro
+
 # macOS
 .DS_Store
 
