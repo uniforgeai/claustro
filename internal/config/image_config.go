@@ -13,10 +13,12 @@ type LanguagesConfig struct {
 }
 
 // ToolsConfig controls which tool groups are installed in the sandbox image.
-// A nil pointer means the tool group is enabled (opt-out model).
+// A nil pointer means the tool group is enabled (opt-out model), except Voice
+// which defaults to disabled (nil = false) since it adds significant image size.
 type ToolsConfig struct {
 	Dev   *bool `yaml:"dev"`
 	Build *bool `yaml:"build"`
+	Voice *bool `yaml:"voice"`
 }
 
 // MCPServersConfig controls which built-in MCP servers are installed in the sandbox image.
@@ -66,6 +68,9 @@ func (c *ImageBuildConfig) IsToolGroupEnabled(group string) bool {
 		return c.Tools.Dev == nil || *c.Tools.Dev
 	case "build":
 		return c.Tools.Build == nil || *c.Tools.Build
+	case "voice":
+		// Voice defaults to disabled (opt-in) — nil means false.
+		return c.Tools.Voice != nil && *c.Tools.Voice
 	default:
 		return false
 	}

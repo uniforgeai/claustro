@@ -107,7 +107,6 @@ func buildContext(imgCfg *config.ImageBuildConfig) ([]byte, error) {
 		{"xclip-shim", xclipShim, 0755},
 		{"wl-paste-shim", wlPasteShim, 0755},
 	}
-
 	for _, f := range files {
 		hdr := &tar.Header{
 			Name: f.name,

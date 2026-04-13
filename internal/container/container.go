@@ -205,12 +205,12 @@ func Exec(ctx context.Context, cli *client.Client, containerID string, cmd []str
 		User:         containerUser,
 		WorkingDir:   containerWorkdir,
 	}
+	cleanup := setupClipboardBridge(opts)
+	defer cleanup()
+
 	if opts.Interactive {
 		execCfg.Env = append(termEnv(), gitEnv()...)
 	}
-
-	cleanup := setupClipboardBridge(opts)
-	defer cleanup()
 
 	execID, err := cli.ContainerExecCreate(ctx, containerID, execCfg)
 	if err != nil {
