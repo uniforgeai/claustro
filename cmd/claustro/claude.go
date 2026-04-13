@@ -14,24 +14,28 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
+	"github.com/uniforgeai/claustro/internal/picker"
+	"github.com/uniforgeai/claustro/internal/session"
 )
 
 func newClaudeCmd() *cobra.Command {
 	var name string
+	var resume bool
 	cmd := &cobra.Command{
 		Use:   "claude",
 		Short: "Launch Claude Code inside a sandbox",
 		Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Automatically starts a sandbox if none is running. Pass extra args after '--'.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClaude(cmd.Context(), name, args)
+			return runClaude(cmd.Context(), name, resume, args)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-select if only one running)`)
+	cmd.Flags().BoolVar(&resume, "resume", false, "Resume a previous Claude Code session")
 	cmd.Flags().SetInterspersed(false)
 	return cmd
 }
 
-func runClaude(ctx context.Context, name string, extraArgs []string) error {
+func runClaude(ctx context.Context, name string, resume bool, extraArgs []string) error {
 	nameWasEmpty := name == ""
 
 	id, err := identity.FromCWD(name)
@@ -84,10 +88,53 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 		return errNotRunning(id)
 	}
 
-	execCmd := append([]string{"claude", "--dangerously-skip-permissions"}, extraArgs...)
+	execCmd := []string{"claude", "--dangerously-skip-permissions"}
+
+	if resume {
+		sessionID, err := pickSession()
+		if err != nil {
+			return err
+		}
+		if sessionID == "" {
+			return nil
+		}
+		execCmd = append(execCmd, "--resume", sessionID)
+	}
+
+	execCmd = append(execCmd, extraArgs...)
 	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
 	return container.Exec(ctx, cli, c.ID, execCmd, container.ExecOptions{
 		Interactive:      true,
 		ClipboardSockDir: sockDir,
 	})
+}
+
+// pickSession discovers sessions and presents the TUI picker.
+// Returns the selected session ID, or empty string if cancelled.
+func pickSession() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("determining home directory: %w", err)
+	}
+
+	claudeDir := filepath.Join(home, ".claude")
+	sessions, err := session.List(claudeDir)
+	if err != nil {
+		return "", fmt.Errorf("listing sessions: %w", err)
+	}
+
+	if len(sessions) == 0 {
+		fmt.Fprintln(os.Stderr, "No sessions found for this project.")
+		return "", nil
+	}
+
+	selected, err := picker.PickSession(sessions)
+	if err != nil {
+		return "", fmt.Errorf("session picker: %w", err)
+	}
+	if selected == nil {
+		return "", nil
+	}
+
+	return selected.ID, nil
 }
