@@ -78,7 +78,7 @@ func parseSessionFile(path string) (Session, error) {
 	if err != nil {
 		return Session{}, fmt.Errorf("opening %s: %w", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
