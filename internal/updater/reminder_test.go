@@ -20,6 +20,11 @@ func TestIsNewer(t *testing.T) {
 	}{
 		{"same version", "v0.1.0", "v0.1.0", false},
 		{"newer available", "v0.1.0", "v0.2.0", true},
+		{"older than current", "v0.2.0", "v0.1.0", false},
+		{"newer patch", "v0.2.0", "v0.2.1", true},
+		{"older patch", "v0.2.1", "v0.2.0", false},
+		{"newer major", "v0.2.0", "v1.0.0", true},
+		{"older major", "v1.0.0", "v0.9.9", false},
 		{"dev build", "dev", "v0.2.0", false},
 		{"empty current", "", "v0.2.0", false},
 		{"with and without v prefix", "0.1.0", "v0.1.0", false},
