@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -104,13 +105,52 @@ func NormalizeVersion(v string) string {
 	return strings.TrimPrefix(v, "v")
 }
 
-// IsNewer returns true if latest is a different (presumably newer) version than current.
+// IsNewer returns true if latest is a higher version than current.
 // For "dev" builds, never nag.
 func IsNewer(current, latest string) bool {
 	if current == "dev" || current == "" {
 		return false
 	}
-	return NormalizeVersion(current) != NormalizeVersion(latest)
+	return compareSemver(NormalizeVersion(current), NormalizeVersion(latest)) < 0
+}
+
+// parseSemver splits a "major.minor.patch" string into three ints.
+// Returns (0, 0, 0) if parsing fails.
+func parseSemver(v string) (int, int, int) {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) != 3 {
+		return 0, 0, 0
+	}
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	patch, _ := strconv.Atoi(parts[2])
+	return major, minor, patch
+}
+
+// compareSemver returns -1 if a < b, 0 if a == b, 1 if a > b.
+func compareSemver(a, b string) int {
+	aMaj, aMin, aPat := parseSemver(a)
+	bMaj, bMin, bPat := parseSemver(b)
+
+	switch {
+	case aMaj != bMaj:
+		return cmpInt(aMaj, bMaj)
+	case aMin != bMin:
+		return cmpInt(aMin, bMin)
+	default:
+		return cmpInt(aPat, bPat)
+	}
+}
+
+func cmpInt(a, b int) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // CheckAndRemind runs the update check (if due) and returns a reminder message.
