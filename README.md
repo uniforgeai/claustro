@@ -115,6 +115,19 @@ claustro uses a `claustro.yaml` file in your project root. Run `claustro init` t
 - Egress firewall — restrict outbound network access from the sandbox
 - MCP server support — run MCP servers inside the sandbox (stdio or SSE)
 
+## Known Differences from Native Claude Code
+
+### Image Paste from Clipboard
+
+When pasting images into a claustro sandbox session, clipboard behavior varies by source application:
+
+- **macOS Finder** (`Cmd+C` on a file, then `Cmd+V`): may paste only the file icon/metadata instead of the actual image content. This is because Finder copies a file reference, not image data.
+- **IDE / other apps** (e.g. IntelliJ IDEA): typically paste the actual image content correctly.
+
+If you need to share a screenshot, the most reliable approaches are:
+1. Copy the image from an app that puts pixel data on the clipboard (Preview, IntelliJ, browser, etc.)
+2. Save the file to disk and reference it by path
+
 ## Development
 
 ```bash
