@@ -29,12 +29,19 @@ type MCPServersConfig struct {
 	Fetch      *bool `yaml:"fetch"`
 }
 
+// AgentsConfig controls which additional coding agents are installed in the sandbox image.
+// A nil pointer means the agent is enabled (opt-out model).
+type AgentsConfig struct {
+	Codex *bool `yaml:"codex"`
+}
+
 // ImageBuildConfig controls what gets installed in the sandbox image during build.
 // All fields use an opt-out model: nil means enabled, false means disabled.
 type ImageBuildConfig struct {
 	Languages  LanguagesConfig  `yaml:"languages"`
 	Tools      ToolsConfig      `yaml:"tools"`
 	MCPServers MCPServersConfig `yaml:"mcp_servers"`
+	Agents     AgentsConfig     `yaml:"agents"`
 }
 
 // DefaultImageBuildConfig returns an ImageBuildConfig with all features enabled (nil pointers).
@@ -86,6 +93,17 @@ func (c *ImageBuildConfig) IsMCPServerEnabled(server string) bool {
 		return c.MCPServers.Memory == nil || *c.MCPServers.Memory
 	case "fetch":
 		return c.MCPServers.Fetch == nil || *c.MCPServers.Fetch
+	default:
+		return false
+	}
+}
+
+// IsAgentEnabled reports whether the given coding agent should be installed.
+// nil means true (enabled), false means disabled. Unknown agents return false.
+func (c *ImageBuildConfig) IsAgentEnabled(agent string) bool {
+	switch agent {
+	case "codex":
+		return c.Agents.Codex == nil || *c.Agents.Codex
 	default:
 		return false
 	}

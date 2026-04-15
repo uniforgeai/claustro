@@ -156,6 +156,27 @@ func TestLoad_MissingImageBlock_AllEnabled(t *testing.T) {
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("filesystem"))
 }
 
+func TestDefaultImageBuildConfig_AgentsEnabled(t *testing.T) {
+	cfg := DefaultImageBuildConfig()
+	assert.True(t, cfg.IsAgentEnabled("codex"), "codex should be enabled by default")
+}
+
+func TestImageBuildConfig_DisableAgents(t *testing.T) {
+	f := false
+	cfg := ImageBuildConfig{
+		Agents: AgentsConfig{
+			Codex: &f,
+		},
+	}
+	assert.False(t, cfg.IsAgentEnabled("codex"))
+}
+
+func TestImageBuildConfig_UnknownAgent(t *testing.T) {
+	cfg := DefaultImageBuildConfig()
+	assert.False(t, cfg.IsAgentEnabled("unknown"), "unknown agent should return false")
+	assert.False(t, cfg.IsAgentEnabled(""), "empty agent should return false")
+}
+
 func TestLoad_ImageBuildConfigWithExtra(t *testing.T) {
 	dir := t.TempDir()
 	content := `
