@@ -48,6 +48,12 @@ When a string, uses that image directly. When a mapping, configures the built im
 | `memory` | bool | true | MCP memory server |
 | `fetch` | bool | true | MCP fetch server |
 
+### image.agents
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `codex` | bool | true | [Codex CLI](https://github.com/openai/codex) (OpenAI) |
+
 ### image.extra
 
 List of additional Dockerfile RUN steps:
