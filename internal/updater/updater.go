@@ -53,6 +53,14 @@ func Update(method Method, currentVersion string) (string, error) {
 
 func updateHomebrew() (string, error) {
 	slog.Info("updating via Homebrew")
+
+	// Refresh the tap index so Homebrew sees the latest version.
+	slog.Info("refreshing Homebrew tap")
+	refresh := exec.Command("brew", "update")
+	if out, err := refresh.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("brew update failed: %w\n%s", err, string(out))
+	}
+
 	cmd := exec.Command("brew", "upgrade", "claustro")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
