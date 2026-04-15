@@ -65,6 +65,24 @@ type CreateOptions struct {
 	Memory string
 }
 
+// sandboxEnv assembles environment variables for a new sandbox container.
+func sandboxEnv(hostPath string) []string {
+	env := []string{
+		"CLAUSTRO_HOST_PATH=" + hostPath,
+		"HOME=" + containerHome,
+	}
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
+	}
+	// Forward API keys from host environment.
+	for _, key := range []string{"OPENAI_API_KEY"} {
+		if val := os.Getenv(key); val != "" {
+			env = append(env, key+"="+val)
+		}
+	}
+	return env
+}
+
 // Create creates (but does not start) a sandbox container.
 func Create(ctx context.Context, cli *client.Client, id *identity.Identity, mounts []mount.Mount, opts CreateOptions) (string, error) {
 	// Ensure the sandbox network exists
@@ -77,13 +95,7 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		imageName = image.ImageName
 	}
 
-	env := []string{
-		"CLAUSTRO_HOST_PATH=" + id.HostPath,
-		"HOME=" + containerHome,
-	}
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
-	}
+	env := sandboxEnv(id.HostPath)
 
 	cfg := &containertypes.Config{
 		Image:  imageName,
