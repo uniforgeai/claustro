@@ -367,3 +367,36 @@ func TestAssemble_notIsolated_includesClaudeMount(t *testing.T) {
 
 	assertMount(t, mounts, filepath.Join(home, ".claude"), "/home/sandbox/.claude", dockermount.TypeBind)
 }
+
+func TestAssemble_codexMountedWhenPresent(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	codexDir := filepath.Join(home, ".codex")
+	if !fileExists(codexDir) {
+		t.Skip("~/.codex does not exist on this machine")
+	}
+
+	mounts, err := Assemble("/some/project", nil, "", false, false)
+	require.NoError(t, err)
+
+	found := false
+	for _, m := range mounts {
+		if m.Target == "/home/sandbox/.codex" {
+			found = true
+			assert.Equal(t, codexDir, m.Source)
+			assert.False(t, m.ReadOnly, "codex dir should be read-write")
+		}
+	}
+	assert.True(t, found, "~/.codex mount should be present when directory exists")
+}
+
+func TestAssemble_codexSkippedWhenIsolated(t *testing.T) {
+	mounts, err := Assemble("/some/project", nil, "", false, true)
+	require.NoError(t, err)
+
+	for _, m := range mounts {
+		assert.NotEqual(t, "/home/sandbox/.codex", m.Target,
+			"~/.codex mount should be skipped when isolatedState=true")
+	}
+}
