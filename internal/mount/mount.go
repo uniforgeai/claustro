@@ -25,6 +25,7 @@ const (
 	containerGHConfig   = containerHome + "/.config/gh"
 	containerSSHDir     = containerHome + "/.ssh"
 	containerKnownHosts = containerSSHDir + "/known_hosts"
+	containerCodexDir   = containerHome + "/.codex"
 	containerWorkspace  = "/workspace"
 	clipboardRunDir     = "/run/claustro"
 )
@@ -84,6 +85,7 @@ func Assemble(hostProjectPath string, git *config.GitConfig, clipboardSockDir st
 	var mounts []mount.Mount
 	addWorkspaceMount(&mounts, hostProjectPath, readOnly)
 	addClaudeMounts(&mounts, home, isolatedState)
+	addCodexMounts(&mounts, home, isolatedState)
 	addGitMounts(&mounts, home, git)
 	addSSHMounts(&mounts, home, git)
 	addPluginMounts(&mounts, home, isolatedState)
@@ -125,6 +127,25 @@ func addClaudeMounts(mounts *[]mount.Mount, home string, isolatedState bool) {
 			Target: containerClaudeJSON,
 		})
 	}
+}
+
+// addCodexMounts appends the ~/.codex directory mount for Codex CLI state.
+// Skipped when isolatedState is true or when ~/.codex does not exist on the host.
+func addCodexMounts(mounts *[]mount.Mount, home string, isolatedState bool) {
+	if isolatedState {
+		return
+	}
+
+	codexDir := filepath.Join(home, ".codex")
+	if _, err := os.Stat(codexDir); err != nil {
+		return
+	}
+
+	*mounts = append(*mounts, mount.Mount{
+		Type:   mount.TypeBind,
+		Source: codexDir,
+		Target: containerCodexDir,
+	})
 }
 
 // addGitMounts appends .gitconfig, .config/gh/, and .ssh/known_hosts mounts

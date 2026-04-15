@@ -20,6 +20,7 @@ func newInitCmd() *cobra.Command {
 		flagLanguages string
 		flagTools     string
 		flagMCP       string
+		flagAgents    string
 		flagCPUs      string
 		flagMemory    string
 		flagFirewall  bool
@@ -37,6 +38,7 @@ func newInitCmd() *cobra.Command {
 				languages: flagLanguages,
 				tools:     flagTools,
 				mcp:       flagMCP,
+				agents:    flagAgents,
 				cpus:      flagCPUs,
 				memory:    flagMemory,
 				firewall:  flagFirewall,
@@ -50,6 +52,7 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagLanguages, "languages", "", "Comma-separated language runtimes to enable (go,rust,python)")
 	cmd.Flags().StringVar(&flagTools, "tools", "", "Comma-separated tool groups to enable (dev,build)")
 	cmd.Flags().StringVar(&flagMCP, "mcp", "", "Comma-separated MCP servers to enable (filesystem,memory,fetch)")
+	cmd.Flags().StringVar(&flagAgents, "agents", "", "Comma-separated agents to install (codex)")
 	cmd.Flags().StringVar(&flagCPUs, "cpus", "", "Number of CPUs (e.g. 4)")
 	cmd.Flags().StringVar(&flagMemory, "memory", "", "Memory limit (e.g. 8G)")
 	cmd.Flags().BoolVar(&flagFirewall, "firewall", false, "Enable egress firewall")
@@ -65,6 +68,7 @@ type initFlags struct {
 	languages string
 	tools     string
 	mcp       string
+	agents    string
 	cpus      string
 	memory    string
 	firewall  bool
@@ -120,6 +124,9 @@ func runInitFlow(cmd *cobra.Command, flags initFlags) error {
 	if cmd.Flags().Changed("mcp") {
 		opts.MCPServers = splitCSV(flags.mcp)
 	}
+	if cmd.Flags().Changed("agents") {
+		opts.Agents = splitCSV(flags.agents)
+	}
 	if cmd.Flags().Changed("cpus") {
 		opts.CPUs = flags.cpus
 	}
@@ -169,6 +176,9 @@ func runWizard(opts *wizard.Options) error {
 	// Collect MCP server selections.
 	mcpValues := opts.MCPServers
 
+	// Collect agent selections.
+	agentValues := opts.Agents
+
 	// Git settings.
 	forwardAgent := opts.ForwardAgent
 	mountGitconfig := opts.MountGitconfig
@@ -210,6 +220,15 @@ func runWizard(opts *wizard.Options) error {
 				Value(&mcpValues),
 		),
 		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Agents").
+				Description("Additional coding agents to install").
+				Options(
+					huh.NewOption("Codex CLI (OpenAI)", "codex").Selected(true),
+				).
+				Value(&agentValues),
+		),
+		huh.NewGroup(
 			huh.NewInput().
 				Title("CPUs").
 				Value(&opts.CPUs),
@@ -245,6 +264,7 @@ func runWizard(opts *wizard.Options) error {
 	opts.Languages = langValues
 	opts.Tools = toolValues
 	opts.MCPServers = mcpValues
+	opts.Agents = agentValues
 	opts.ForwardAgent = forwardAgent
 	opts.MountGitconfig = mountGitconfig
 	opts.MountGhConfig = mountGhConfig

@@ -156,6 +156,55 @@ func TestLoad_MissingImageBlock_AllEnabled(t *testing.T) {
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("filesystem"))
 }
 
+func TestDefaultImageBuildConfig_AgentsEnabled(t *testing.T) {
+	cfg := DefaultImageBuildConfig()
+	assert.True(t, cfg.IsAgentEnabled("codex"), "codex should be enabled by default")
+}
+
+func TestImageBuildConfig_DisableAgents(t *testing.T) {
+	f := false
+	cfg := ImageBuildConfig{
+		Agents: AgentsConfig{
+			Codex: &f,
+		},
+	}
+	assert.False(t, cfg.IsAgentEnabled("codex"))
+}
+
+func TestImageBuildConfig_UnknownAgent(t *testing.T) {
+	cfg := DefaultImageBuildConfig()
+	assert.False(t, cfg.IsAgentEnabled("unknown"), "unknown agent should return false")
+	assert.False(t, cfg.IsAgentEnabled(""), "empty agent should return false")
+}
+
+func TestLoad_AgentsConfigFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+image:
+  agents:
+    codex: false
+`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+
+	assert.False(t, cfg.ImageBuild.IsAgentEnabled("codex"))
+}
+
+func TestLoad_MissingAgentsBlock_AllEnabled(t *testing.T) {
+	dir := t.TempDir()
+	content := `project: my-project`
+	err := os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+
+	assert.True(t, cfg.ImageBuild.IsAgentEnabled("codex"), "codex should be enabled when agents block is missing")
+}
+
 func TestLoad_ImageBuildConfigWithExtra(t *testing.T) {
 	dir := t.TempDir()
 	content := `

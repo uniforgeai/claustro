@@ -21,6 +21,7 @@ claustro init [flags]
 | `--languages` | Comma-separated: go,rust,python | all enabled |
 | `--tools` | Comma-separated: dev,build | all enabled |
 | `--mcp` | Comma-separated: filesystem,memory,fetch | all enabled |
+| `--agents` | Comma-separated: codex | all enabled |
 | `--cpus` | CPU limit | 4 |
 | `--memory` | Memory limit | 8G |
 | `--firewall` | Enable egress firewall | false |
