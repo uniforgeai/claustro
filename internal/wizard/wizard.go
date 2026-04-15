@@ -16,6 +16,7 @@ type Options struct {
 	Languages      []string // subset of: go, rust, python
 	Tools          []string // subset of: dev, build
 	MCPServers     []string // subset of: filesystem, memory, fetch
+	Agents         []string // subset of: codex
 	CPUs           string
 	Memory         string
 	Firewall       bool
@@ -32,6 +33,7 @@ func DefaultOptions(project string) Options {
 		Languages:      []string{"go", "rust", "python"},
 		Tools:          []string{"dev", "build"},
 		MCPServers:     []string{"filesystem", "memory", "fetch"},
+		Agents:         []string{"codex"},
 		CPUs:           "4",
 		Memory:         "8G",
 		Firewall:       false,
@@ -119,6 +121,11 @@ func BuildConfig(opts Options) config.Config {
 	}
 	if !contains(opts.MCPServers, "fetch") {
 		imageBuild.MCPServers.Fetch = boolPtr(false)
+	}
+
+	// Agents: codex.
+	if !contains(opts.Agents, "codex") {
+		imageBuild.Agents.Codex = boolPtr(false)
 	}
 
 	cfg.ImageBuild = imageBuild

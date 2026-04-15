@@ -17,6 +17,7 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, []string{"go", "rust", "python"}, opts.Languages)
 	assert.Equal(t, []string{"dev", "build"}, opts.Tools)
 	assert.Equal(t, []string{"filesystem", "memory", "fetch"}, opts.MCPServers)
+	assert.Equal(t, []string{"codex"}, opts.Agents)
 	assert.Equal(t, "4", opts.CPUs)
 	assert.Equal(t, "8G", opts.Memory)
 	assert.False(t, opts.Firewall)
@@ -48,6 +49,9 @@ func TestBuildConfig_Defaults(t *testing.T) {
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("filesystem"), "filesystem should be enabled")
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("memory"), "memory should be enabled")
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("fetch"), "fetch should be enabled")
+
+	// All agents enabled.
+	assert.True(t, cfg.ImageBuild.IsAgentEnabled("codex"), "codex should be enabled")
 
 	// Firewall off by default.
 	assert.Nil(t, cfg.Defaults.Firewall)
@@ -112,6 +116,19 @@ func TestBuildConfig_SelectiveMCPServers(t *testing.T) {
 	assert.True(t, cfg.ImageBuild.IsMCPServerEnabled("filesystem"))
 	assert.False(t, cfg.ImageBuild.IsMCPServerEnabled("memory"))
 	assert.False(t, cfg.ImageBuild.IsMCPServerEnabled("fetch"))
+}
+
+func TestBuildConfig_SelectiveAgents(t *testing.T) {
+	opts := DefaultOptions("agents-project")
+	opts.Agents = []string{} // codex NOT included
+
+	cfg := BuildConfig(opts)
+
+	assert.False(t, cfg.ImageBuild.IsAgentEnabled("codex"))
+
+	// Codex should be explicitly false.
+	require.NotNil(t, cfg.ImageBuild.Agents.Codex)
+	assert.False(t, *cfg.ImageBuild.Agents.Codex)
 }
 
 func TestMarshalConfig(t *testing.T) {
