@@ -69,7 +69,10 @@ RUN pip3 install --break-system-packages mcp-server-fetch
 {{end}}
 # Install ccstatusline (optional — native build may fail on some architectures)
 RUN npm install -g ccstatusline || true
-{{if .Go}}
+{{if .Codex}}
+# Install Codex CLI
+RUN npm install -g @openai/codex
+{{end}}{{if .Go}}
 # Install gopls (Go language server for LSP support in Claude Code)
 RUN GOPATH=/tmp/gopls-build go install golang.org/x/tools/gopls@latest \
     && mv /tmp/gopls-build/bin/gopls /usr/local/bin/gopls \

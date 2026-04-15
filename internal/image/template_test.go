@@ -46,6 +46,9 @@ func TestRenderDockerfile_AllEnabled(t *testing.T) {
 	assert.Contains(t, out, "@modelcontextprotocol/server-filesystem")
 	assert.Contains(t, out, "@modelcontextprotocol/server-memory")
 	assert.Contains(t, out, "mcp-server-fetch")
+
+	// Codex
+	assert.Contains(t, out, "@openai/codex")
 }
 
 func TestRenderDockerfile_MinimalConfig(t *testing.T) {
@@ -64,6 +67,9 @@ func TestRenderDockerfile_MinimalConfig(t *testing.T) {
 			Filesystem: &f,
 			Memory:     &f,
 			Fetch:      &f,
+		},
+		Agents: config.AgentsConfig{
+			Codex: &f,
 		},
 	}
 	out, err := RenderDockerfile(&cfg)
@@ -86,6 +92,7 @@ func TestRenderDockerfile_MinimalConfig(t *testing.T) {
 	assert.NotContains(t, out, "@modelcontextprotocol/server-filesystem")
 	assert.NotContains(t, out, "@modelcontextprotocol/server-memory")
 	assert.NotContains(t, out, "mcp-server-fetch")
+	assert.NotContains(t, out, "@openai/codex")
 }
 
 func TestRenderDockerfile_SelectiveLanguages(t *testing.T) {
@@ -152,4 +159,21 @@ func TestRenderDockerfile_IsValidDockerfile(t *testing.T) {
 	assert.True(t, len(out) > 0)
 	// Valid Dockerfiles start with FROM
 	assert.Equal(t, "FROM ", out[:5])
+}
+
+func TestRenderDockerfile_CodexEnabled(t *testing.T) {
+	cfg := config.DefaultImageBuildConfig()
+	out, err := RenderDockerfile(&cfg)
+	require.NoError(t, err)
+	assert.Contains(t, out, "@openai/codex", "codex should be installed by default")
+}
+
+func TestRenderDockerfile_CodexDisabled(t *testing.T) {
+	f := false
+	cfg := config.DefaultImageBuildConfig()
+	cfg.Agents.Codex = &f
+
+	out, err := RenderDockerfile(&cfg)
+	require.NoError(t, err)
+	assert.NotContains(t, out, "@openai/codex", "codex should not be installed when disabled")
 }

@@ -13,10 +13,11 @@ import (
 )
 
 type templateData struct {
-	Go, Rust, Python             bool
-	DevTools, BuildTools         bool
+	Go, Rust, Python                   bool
+	DevTools, BuildTools               bool
 	MCPFilesystem, MCPMemory, MCPFetch bool
-	VoiceMode                    bool
+	VoiceMode                          bool
+	Codex                              bool
 }
 
 //go:embed Dockerfile.tmpl
@@ -38,6 +39,7 @@ func RenderDockerfile(cfg *config.ImageBuildConfig) (string, error) {
 		// MCPFetch requires Python (pip3); skip it when Python is disabled.
 		MCPFetch:  cfg.IsMCPServerEnabled("fetch") && python,
 		VoiceMode: cfg.IsToolGroupEnabled("voice"),
+		Codex:     cfg.IsAgentEnabled("codex"),
 	}
 
 	slog.Info("rendering Dockerfile from template",
@@ -45,6 +47,7 @@ func RenderDockerfile(cfg *config.ImageBuildConfig) (string, error) {
 		"devTools", data.DevTools, "buildTools", data.BuildTools,
 		"mcpFilesystem", data.MCPFilesystem, "mcpMemory", data.MCPMemory, "mcpFetch", data.MCPFetch,
 		"voiceMode", data.VoiceMode,
+		"codex", data.Codex,
 	)
 
 	var buf bytes.Buffer
