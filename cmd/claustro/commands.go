@@ -11,6 +11,7 @@ func setupCommands(root *cobra.Command) {
 	root.AddCommand(newBurnCmd())
 	root.AddCommand(newShellCmd())
 	root.AddCommand(newClaudeCmd())
+	root.AddCommand(newCodexCmd())
 	root.AddCommand(newExecCmd())
 	root.AddCommand(newLsCmd())
 	root.AddCommand(newNukeCmd())
