@@ -71,7 +71,7 @@ func runClaude(ctx context.Context, name string, extraArgs []string) error {
 	}
 
 	// Ensure the sandbox is running, creating it if needed.
-	id, _, err = ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: name})
+	id, _, _, err = ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: name})
 	if err != nil {
 		return err
 	}
