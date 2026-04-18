@@ -113,11 +113,13 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
 	if nameWasEmpty {
 		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
-		fmt.Printf("  Run: claustro shell --name %s\n", id.Name)
+		fmt.Printf("  Run: claustro shell  --name %s\n", id.Name)
 		fmt.Printf("  Run: claustro claude --name %s\n", id.Name)
+		fmt.Printf("  Run: claustro codex  --name %s\n", id.Name)
 	} else {
 		fmt.Printf("  Run: claustro shell  —  open a shell\n")
 		fmt.Printf("  Run: claustro claude —  start Claude Code\n")
+		fmt.Printf("  Run: claustro codex  —  start Codex CLI\n")
 	}
 	return nil
 }
