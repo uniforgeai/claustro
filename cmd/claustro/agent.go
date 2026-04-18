@@ -4,9 +4,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/uniforgeai/claustro/internal/config"
+	"github.com/uniforgeai/claustro/internal/container"
+	"github.com/uniforgeai/claustro/internal/identity"
 )
 
 // AgentSpec describes how a coding agent (Claude, Codex, ...) is launched
@@ -69,4 +75,71 @@ func checkAgentEnabled(cfg *config.Config, spec AgentSpec) error {
 			"Enable it and run 'claustro rebuild', or run 'claustro shell' to use other tools.",
 		spec.Name, spec.ConfigKey,
 	)
+}
+
+// runAgent is the shared entry point for `claustro claude` and `claustro codex`.
+// It resolves the target sandbox, ensures it is running, optionally checks that
+// the agent is enabled in the project config, and execs the agent inside the
+// container with an interactive TTY and clipboard bridge.
+func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []string) error {
+	nameWasEmpty := nameFlag == ""
+
+	id, err := identity.FromCWD(nameFlag)
+	if err != nil {
+		return fmt.Errorf("resolving identity: %w", err)
+	}
+
+	cli, err := newDockerClient()
+	if err != nil {
+		return err
+	}
+	defer cli.Close() //nolint:errcheck
+
+	// Auto-select sandbox by name when none was supplied.
+	if nameWasEmpty {
+		containers, err := container.ListByProject(ctx, cli, id.Project, false)
+		if err != nil {
+			return fmt.Errorf("listing sandboxes: %w", err)
+		}
+		switch len(containers) {
+		case 0:
+			// No sandbox running — fall through to auto-up.
+		case 1:
+			resolvedName := containers[0].Labels["claustro.name"]
+			id, err = identity.FromCWD(resolvedName)
+			if err != nil {
+				return fmt.Errorf("resolving identity: %w", err)
+			}
+		default:
+			names := make([]string, len(containers))
+			for i, c := range containers {
+				names[i] = "  " + c.Labels["claustro.name"]
+			}
+			return fmt.Errorf("multiple sandboxes running, specify --name:\n%s", strings.Join(names, "\n"))
+		}
+	}
+
+	id, cfg, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag})
+	if err != nil {
+		return err
+	}
+
+	if err := checkAgentEnabled(cfg, spec); err != nil {
+		return err
+	}
+
+	c, err := container.FindByIdentity(ctx, cli, id)
+	if err != nil {
+		return fmt.Errorf("finding sandbox: %w", err)
+	}
+	if c == nil {
+		return errNotRunning(id)
+	}
+
+	execCmd := buildAgentCmd(spec, extraArgs)
+	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
+	return container.Exec(ctx, cli, c.ID, execCmd, container.ExecOptions{
+		Interactive:      true,
+		ClipboardSockDir: sockDir,
+	})
 }
