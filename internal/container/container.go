@@ -192,8 +192,6 @@ func parseMemory(s string) (int64, error) {
 	}
 }
 
-const eightGiB = int64(8) * 1024 * 1024 * 1024
-
 // smartCPUs returns nanoCPUs computed from the host: max(2, host_cores/4).
 // Used when no explicit cpus value is set in claustro.yaml.
 func smartCPUs(h *sysinfo.Host) int64 {
@@ -207,14 +205,14 @@ func smartCPUs(h *sysinfo.Host) int64 {
 // smartMemory returns bytes computed from the host: min(8 GiB, host_mem/4).
 func smartMemory(h *sysinfo.Host) int64 {
 	quarter := h.MemoryBytes / 4
-	if quarter < eightGiB {
+	if quarter < defaultMemory {
 		return quarter
 	}
-	return eightGiB
+	return defaultMemory
 }
 
 // parseNanoCPUsForHost is parseNanoCPUs with a host-aware default.
-// When s is empty, returns smartCPUs(host); otherwise parses s.
+// When s is empty, returns smartCPUs(host); otherwise delegates to parseNanoCPUs(s).
 func parseNanoCPUsForHost(s string, host *sysinfo.Host) (int64, error) {
 	if s == "" {
 		if host == nil {
@@ -222,14 +220,7 @@ func parseNanoCPUsForHost(s string, host *sysinfo.Host) (int64, error) {
 		}
 		return smartCPUs(host), nil
 	}
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid cpu value: %w", err)
-	}
-	if val <= 0 {
-		return 0, fmt.Errorf("cpus must be positive, got %v", val)
-	}
-	return int64(val * nanosecondsPerCPU), nil
+	return parseNanoCPUs(s)
 }
 
 // parseMemoryForHost is parseMemory with a host-aware default.
