@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types/mount"
@@ -16,11 +17,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
+	"github.com/uniforgeai/claustro/internal/daemon"
 	"github.com/uniforgeai/claustro/internal/firewall"
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
 	"github.com/uniforgeai/claustro/internal/mcp"
 	internalMount "github.com/uniforgeai/claustro/internal/mount"
+	"github.com/uniforgeai/claustro/internal/sysinfo"
 )
 
 func newUpCmd() *cobra.Command {
@@ -91,6 +94,11 @@ func parseEnvFlags(envs []string) map[string]string {
 func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) error {
 	nameWasEmpty := name == ""
 
+	host, hostErr := sysinfo.Detect()
+	if hostErr != nil {
+		slog.Warn("host detection partial, using fallback for missing fields", "err", hostErr)
+	}
+
 	id, err := identity.FromCWD(name)
 	if err != nil {
 		return fmt.Errorf("resolving identity: %w", err)
@@ -102,7 +110,7 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 	}
 	defer cli.Close() //nolint:errcheck
 
-	id, _, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false, cliOverrides)
+	id, _, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false, cliOverrides, host)
 	if err != nil {
 		return err
 	}
@@ -111,6 +119,7 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 	}
 
 	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
+	fmt.Printf("  Resources: %s CPU / %s memory\n", effectiveCPUs(host), effectiveMemory(host))
 	if nameWasEmpty {
 		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
 		fmt.Printf("  Run: claustro shell  --name %s\n", id.Name)
@@ -120,6 +129,14 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 		fmt.Printf("  Run: claustro shell  —  open a shell\n")
 		fmt.Printf("  Run: claustro claude —  start Claude Code\n")
 		fmt.Printf("  Run: claustro codex  —  start Codex CLI\n")
+	}
+
+	if claustrodPath, err := daemon.LookupBinary(); err == nil {
+		if err := daemon.EnsureRunning(claustrodPath); err != nil {
+			slog.Warn("claustrod could not start; sandboxes will run without auto-pause", "err", err)
+		}
+	} else {
+		slog.Warn("claustrod binary not found; sandboxes will run without auto-pause", "err", err)
 	}
 	return nil
 }
@@ -133,7 +150,7 @@ const maxNameRetries = 5
 // The returned identity may differ from the input if the name was auto-generated and
 // required retry due to a collision. The loaded *config.Config is also returned so
 // callers can inspect project settings (e.g. enabled agents) without re-loading.
-func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool, cliOverrides config.CLIOverrides) (_ *identity.Identity, _ *config.Config, alreadyRunning bool, _ error) {
+func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool, cliOverrides config.CLIOverrides, host *sysinfo.Host) (_ *identity.Identity, _ *config.Config, alreadyRunning bool, _ error) {
 	cfg, err := config.Load(id.HostPath)
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("loading config: %w", err)
@@ -188,6 +205,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	opts.Firewall = resolved.Firewall
 	opts.CPUs = resolved.CPUs
 	opts.Memory = resolved.Memory
+	opts.Host = host
 
 	mounts, err := setupVolumesAndMounts(ctx, cli, id, cfg, resolved)
 	if err != nil {
@@ -374,4 +392,31 @@ func extraRunSteps(steps []config.ExtraStep) []string {
 		out[i] = s.Run
 	}
 	return out
+}
+
+// effectiveCPUs returns the CPU cap that smartCPUs would compute for the host,
+// formatted as a string. Used for the success-output hint.
+func effectiveCPUs(h *sysinfo.Host) string {
+	if h == nil {
+		return "4"
+	}
+	cores := h.CPUs / 4
+	if cores < 2 {
+		cores = 2
+	}
+	return strconv.Itoa(cores)
+}
+
+// effectiveMemory returns the memory cap that smartMemory would compute for the host,
+// formatted as a string. Used for the success-output hint.
+func effectiveMemory(h *sysinfo.Host) string {
+	if h == nil {
+		return "8GiB"
+	}
+	const eight = int64(8) * 1024 * 1024 * 1024
+	bytes := h.MemoryBytes / 4
+	if bytes > eight {
+		bytes = eight
+	}
+	return fmt.Sprintf("%dGiB", bytes/(1024*1024*1024))
 }

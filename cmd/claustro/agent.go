@@ -13,6 +13,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
+	"github.com/uniforgeai/claustro/internal/sysinfo"
 )
 
 // AgentSpec describes how a coding agent (Claude, Codex, ...) is launched
@@ -119,7 +120,8 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 		}
 	}
 
-	id, cfg, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag})
+	host, _ := sysinfo.Detect()
+	id, cfg, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
 	if err != nil {
 		return err
 	}
