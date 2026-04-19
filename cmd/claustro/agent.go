@@ -121,7 +121,7 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 	}
 
 	host, _ := sysinfo.Detect()
-	id, cfg, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
+	id, cfg, _, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
 	if err != nil {
 		return err
 	}
