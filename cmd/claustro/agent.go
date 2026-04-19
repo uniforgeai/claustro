@@ -136,6 +136,10 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 		return errNotRunning(id)
 	}
 
+	if err := unpauseIfPaused(ctx, cli, id, c.ID); err != nil {
+		return err
+	}
+
 	execCmd := buildAgentCmd(spec, extraArgs)
 	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
 	return container.Exec(ctx, cli, c.ID, execCmd, container.ExecOptions{

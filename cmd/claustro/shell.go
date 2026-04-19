@@ -32,6 +32,10 @@ func runShell(ctx context.Context, name string) error {
 	}
 	defer cli.Close() //nolint:errcheck
 
+	if err := unpauseIfPaused(ctx, cli, id, c.ID); err != nil {
+		return err
+	}
+
 	sockDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
 	return container.Exec(ctx, cli, c.ID, []string{"/bin/zsh"}, container.ExecOptions{
 		Interactive:      true,
