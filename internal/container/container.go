@@ -488,6 +488,22 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 	return nil
 }
 
+// Pause freezes the container's processes via cgroup freezer (SDK pause).
+func Pause(ctx context.Context, cli *client.Client, containerID string) error {
+	if err := cli.ContainerPause(ctx, containerID); err != nil {
+		return fmt.Errorf("pausing container: %w", err)
+	}
+	return nil
+}
+
+// Unpause resumes a paused container.
+func Unpause(ctx context.Context, cli *client.Client, containerID string) error {
+	if err := cli.ContainerUnpause(ctx, containerID); err != nil {
+		return fmt.Errorf("unpausing container: %w", err)
+	}
+	return nil
+}
+
 // ExecSimple runs a non-interactive command inside a running container and returns any error.
 // It captures stdout/stderr but does not stream them.
 func ExecSimple(ctx context.Context, cli *client.Client, containerID string, cmd []string) error {

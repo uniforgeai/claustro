@@ -119,6 +119,12 @@ func StopSSESiblings(ctx context.Context, cli *client.Client, id *identity.Ident
 	}
 }
 
+// ListSSESiblings returns the MCP SSE sibling containers for the given parent identity.
+// Used by the daemon and the resume helper to mirror pause/unpause across siblings.
+func ListSSESiblings(ctx context.Context, cli *client.Client, id *identity.Identity) ([]containertypes.Summary, error) {
+	return listSiblings(ctx, cli, id)
+}
+
 func listSiblings(ctx context.Context, cli *client.Client, id *identity.Identity) ([]containertypes.Summary, error) {
 	args := containertypes.ListOptions{
 		All: true,
