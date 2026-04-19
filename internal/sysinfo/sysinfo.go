@@ -30,10 +30,15 @@ func Detect() (*Host, error) {
 		return safeFallback(), errors.New("runtime.NumCPU returned non-positive")
 	}
 	mem, err := detectMemory()
-	if err != nil || mem <= 0 {
+	if err != nil {
 		fb := safeFallback()
-		fb.CPUs = cpus // keep what we did learn
+		fb.CPUs = cpus
 		return fb, fmt.Errorf("memory detection failed: %w", err)
+	}
+	if mem <= 0 {
+		fb := safeFallback()
+		fb.CPUs = cpus
+		return fb, errors.New("memory detection returned non-positive")
 	}
 	return &Host{CPUs: cpus, MemoryBytes: mem}, nil
 }
@@ -56,15 +61,19 @@ func detectMemory() (int64, error) {
 func detectMemoryDarwin() (int64, error) {
 	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("invoking sysctl hw.memsize: %w", err)
 	}
-	return strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parsing sysctl output: %w", err)
+	}
+	return n, nil
 }
 
 func detectMemoryLinux() (int64, error) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("opening /proc/meminfo: %w", err)
 	}
 	defer f.Close() //nolint:errcheck
 	scanner := bufio.NewScanner(f)
@@ -79,7 +88,7 @@ func detectMemoryLinux() (int64, error) {
 		}
 		kib, err := strconv.ParseInt(fields[1], 10, 64)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("parsing MemTotal value %q: %w", fields[1], err)
 		}
 		return kib * 1024, nil
 	}
