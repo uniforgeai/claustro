@@ -3,7 +3,7 @@
 
 package daemon
 
-// PollInterval is how often the daemon polls the Docker SDK.
 import "time"
 
+// PollInterval is how often the daemon polls the Docker SDK.
 const PollInterval = 30 * time.Second

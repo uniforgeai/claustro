@@ -212,6 +212,8 @@ func writePidFile(path string) error {
 
 // setupLogging routes slog output to ~/.claustro/claustrod.log (append).
 // No rotation in v1; manual truncate is fine for a perf daemon.
+// The log file is intentionally not closed: its lifetime equals the process
+// lifetime and the OS reclaims the FD on exit.
 func setupLogging() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
