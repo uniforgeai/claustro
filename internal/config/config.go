@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	Firewall FirewallConfig        `yaml:"firewall"`
 	MCP      MCPConfig             `yaml:"mcp"`
 	Git      GitConfig             `yaml:"git"`
+	Pause    PauseConfig           `yaml:"pause"`
 
 	// Parsed image fields (populated by postProcess).
 	ImageName   string
@@ -103,6 +105,23 @@ func (g *GitConfig) IsMountGhConfig() bool { return g.MountGhConfig == nil || *g
 
 // IsMountSSHDir returns true only when explicitly enabled in config (default: false).
 func (g *GitConfig) IsMountSSHDir() bool { return g.MountSSHDir != nil && *g.MountSSHDir }
+
+// PauseConfig controls idle auto-pause for this project's sandboxes.
+type PauseConfig struct {
+	Enabled     *bool         `yaml:"enabled"`
+	IdleTimeout time.Duration `yaml:"idle_timeout"`
+}
+
+// IsEnabled returns true unless explicitly disabled.
+func (p PauseConfig) IsEnabled() bool { return p.Enabled == nil || *p.Enabled }
+
+// Timeout returns IdleTimeout, defaulting to 5 minutes when unset (zero value).
+func (p PauseConfig) Timeout() time.Duration {
+	if p.IdleTimeout == 0 {
+		return 5 * time.Minute
+	}
+	return p.IdleTimeout
+}
 
 // Load reads claustro.yaml from projectPath and returns the parsed Config.
 // If claustro.yaml is not present, an empty Config is returned with no error.
