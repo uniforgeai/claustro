@@ -71,8 +71,8 @@ func checkAgentEnabled(cfg *config.Config, spec AgentSpec) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"%s is disabled in claustro.yaml (image.agents.%s: false). "+
-			"Enable it and run 'claustro rebuild', or run 'claustro shell' to use other tools.",
+		"%s is disabled in claustro.yaml (image.agents.%s: false); "+
+			"enable it and run 'claustro rebuild', or run 'claustro shell' to use other tools",
 		spec.Name, spec.ConfigKey,
 	)
 }
