@@ -30,7 +30,7 @@ func findSubcmd(root *cobra.Command, name string) *cobra.Command {
 
 func TestSetupCommands_RegistersAllCommands(t *testing.T) {
 	root := makeRoot()
-	expected := []string{"burn", "claude", "config", "doctor", "exec", "init", "logs", "ls", "nuke", "rebuild", "shell", "status", "up", "validate"}
+	expected := []string{"burn", "claude", "codex", "config", "doctor", "exec", "init", "logs", "ls", "nuke", "rebuild", "shell", "status", "up", "validate"}
 	for _, name := range expected {
 		t.Run(name, func(t *testing.T) {
 			cmd := findSubcmd(root, name)
@@ -64,6 +64,20 @@ func TestClaudeCmd_DescribesAutoUp(t *testing.T) {
 
 func TestClaudeCmd_Defaults(t *testing.T) {
 	cmd := newClaudeCmd()
+	f := cmd.Flags().Lookup("name")
+	assert.NotNil(t, f)
+	assert.Equal(t, "", f.DefValue)
+}
+
+func TestCodexCmd_DescribesAutoUp(t *testing.T) {
+	root := makeRoot()
+	cmd := findSubcmd(root, "codex")
+	require.NotNil(t, cmd)
+	assert.Contains(t, cmd.Long, "Automatically starts a sandbox if none is running")
+}
+
+func TestCodexCmd_Defaults(t *testing.T) {
+	cmd := newCodexCmd()
 	f := cmd.Flags().Lookup("name")
 	assert.NotNil(t, f)
 	assert.Equal(t, "", f.DefValue)

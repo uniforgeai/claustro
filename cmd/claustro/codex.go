@@ -7,14 +7,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newClaudeCmd() *cobra.Command {
+func newCodexCmd() *cobra.Command {
 	var name string
 	cmd := &cobra.Command{
-		Use:   "claude",
-		Short: "Launch Claude Code inside a sandbox",
-		Long:  "Runs 'claude --dangerously-skip-permissions' inside the sandbox. Automatically starts a sandbox if none is running. Pass extra args after '--'.",
+		Use:   "codex",
+		Short: "Launch Codex CLI inside a sandbox",
+		Long:  "Runs 'codex --dangerously-bypass-approvals-and-sandbox' inside the sandbox. Automatically starts a sandbox if none is running. Pass extra args after '--'.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAgent(cmd.Context(), name, claudeSpec, args)
+			return runAgent(cmd.Context(), name, codexSpec, args)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", `Sandbox name (default: auto-select if only one running)`)
