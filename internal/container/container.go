@@ -29,6 +29,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/identity"
 	"github.com/uniforgeai/claustro/internal/image"
 	claustromount "github.com/uniforgeai/claustro/internal/mount"
+	"github.com/uniforgeai/claustro/internal/sysinfo"
 )
 
 // Default resource limits applied when no config override is provided.
@@ -58,11 +59,14 @@ type CreateOptions struct {
 	// NET_ADMIN capability so that iptables rules can be applied after start.
 	Firewall bool
 	// CPUs is the number of CPUs to allocate (e.g. "2", "0.5").
-	// If empty, defaultNanoCPUs is used.
+	// If empty and Host is set, smartCPUs(Host) is used; otherwise defaultNanoCPUs.
 	CPUs string
 	// Memory is the memory limit (e.g. "8G", "512M", "1024K").
-	// If empty, defaultMemory is used.
+	// If empty and Host is set, smartMemory(Host) is used; otherwise defaultMemory.
 	Memory string
+	// Host is the detected host machine. When set and CPUs/Memory are empty,
+	// resource caps are computed proportional to the host.
+	Host *sysinfo.Host
 }
 
 // sandboxEnv assembles environment variables for a new sandbox container.
@@ -107,11 +111,11 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		AttachStderr: false,
 	}
 
-	nanoCPUs, err := parseNanoCPUs(opts.CPUs)
+	nanoCPUs, err := parseNanoCPUsForHost(opts.CPUs, opts.Host)
 	if err != nil {
 		return "", fmt.Errorf("parsing cpus %q: %w", opts.CPUs, err)
 	}
-	memBytes, err := parseMemory(opts.Memory)
+	memBytes, err := parseMemoryForHost(opts.Memory, opts.Host)
 	if err != nil {
 		return "", fmt.Errorf("parsing memory %q: %w", opts.Memory, err)
 	}
@@ -186,6 +190,48 @@ func parseMemory(s string) (int64, error) {
 	default:
 		return 0, fmt.Errorf("unknown memory suffix %q, expected G, M, or K", suffix)
 	}
+}
+
+// smartCPUs returns nanoCPUs computed from the host: max(2, host_cores/4).
+// Used when no explicit cpus value is set in claustro.yaml.
+func smartCPUs(h *sysinfo.Host) int64 {
+	cores := h.CPUs / 4
+	if cores < 2 {
+		cores = 2
+	}
+	return int64(cores) * nanosecondsPerCPU
+}
+
+// smartMemory returns bytes computed from the host: min(8 GiB, host_mem/4).
+func smartMemory(h *sysinfo.Host) int64 {
+	quarter := h.MemoryBytes / 4
+	if quarter < defaultMemory {
+		return quarter
+	}
+	return defaultMemory
+}
+
+// parseNanoCPUsForHost is parseNanoCPUs with a host-aware default.
+// When s is empty, returns smartCPUs(host); otherwise delegates to parseNanoCPUs(s).
+func parseNanoCPUsForHost(s string, host *sysinfo.Host) (int64, error) {
+	if s == "" {
+		if host == nil {
+			return defaultNanoCPUs, nil
+		}
+		return smartCPUs(host), nil
+	}
+	return parseNanoCPUs(s)
+}
+
+// parseMemoryForHost is parseMemory with a host-aware default.
+func parseMemoryForHost(s string, host *sysinfo.Host) (int64, error) {
+	if s == "" {
+		if host == nil {
+			return defaultMemory, nil
+		}
+		return smartMemory(host), nil
+	}
+	return parseMemory(s)
 }
 
 // Start starts an existing container.
@@ -438,6 +484,22 @@ func ensureNetwork(ctx context.Context, cli *client.Client, id *identity.Identit
 	})
 	if err != nil {
 		return fmt.Errorf("creating network: %w", err)
+	}
+	return nil
+}
+
+// Pause freezes the container's processes via cgroup freezer (SDK pause).
+func Pause(ctx context.Context, cli *client.Client, containerID string) error {
+	if err := cli.ContainerPause(ctx, containerID); err != nil {
+		return fmt.Errorf("pausing container: %w", err)
+	}
+	return nil
+}
+
+// Unpause resumes a paused container.
+func Unpause(ctx context.Context, cli *client.Client, containerID string) error {
+	if err := cli.ContainerUnpause(ctx, containerID); err != nil {
+		return fmt.Errorf("unpausing container: %w", err)
 	}
 	return nil
 }

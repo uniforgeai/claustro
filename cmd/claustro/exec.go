@@ -31,11 +31,15 @@ func runExec(ctx context.Context, name string, args []string) error {
 		return fmt.Errorf("command required after '--'")
 	}
 
-	cli, _, c, err := resolveTargetContainer(ctx, name)
+	cli, id, c, err := resolveTargetContainer(ctx, name)
 	if err != nil {
 		return err
 	}
 	defer cli.Close() //nolint:errcheck
+
+	if err := unpauseIfPaused(ctx, cli, id, c.ID); err != nil {
+		return err
+	}
 
 	return container.Exec(ctx, cli, c.ID, args, container.ExecOptions{})
 }

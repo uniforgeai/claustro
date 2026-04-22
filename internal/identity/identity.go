@@ -19,6 +19,7 @@ const (
 	LabelRole      = "claustro.role"
 	LabelManaged   = "claustro.managed"
 	LabelMCPServer = "claustro.mcp-server"
+	LabelHostPath  = "claustro.host_path"
 )
 
 var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
@@ -115,8 +116,9 @@ func (id *Identity) MCPLabels(serverName string) map[string]string {
 // Labels returns the Docker labels to apply to all resources for this sandbox.
 func (id *Identity) Labels() map[string]string {
 	return map[string]string{
-		LabelManaged: "true",
-		LabelProject: id.Project,
-		LabelName:    id.Name,
+		LabelManaged:  "true",
+		LabelProject:  id.Project,
+		LabelName:     id.Name,
+		LabelHostPath: id.HostPath,
 	}
 }

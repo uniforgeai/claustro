@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/config"
 	"github.com/uniforgeai/claustro/internal/container"
 	"github.com/uniforgeai/claustro/internal/identity"
+	"github.com/uniforgeai/claustro/internal/sysinfo"
 )
 
 // AgentSpec describes how a coding agent (Claude, Codex, ...) is launched
@@ -119,12 +121,17 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 		}
 	}
 
-	id, cfg, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag})
+	host, hostErr := sysinfo.Detect()
+	if hostErr != nil {
+		slog.Debug("host detection partial, using fallback for missing fields", "err", hostErr)
+	}
+	result, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
 	if err != nil {
 		return err
 	}
+	id = result.ID
 
-	if err := checkAgentEnabled(cfg, spec); err != nil {
+	if err := checkAgentEnabled(result.ProjectConfig, spec); err != nil {
 		return err
 	}
 
@@ -134,6 +141,10 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 	}
 	if c == nil {
 		return errNotRunning(id)
+	}
+
+	if err := unpauseIfPaused(ctx, cli, id, c.ID); err != nil {
+		return err
 	}
 
 	execCmd := buildAgentCmd(spec, extraArgs)

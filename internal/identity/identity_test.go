@@ -189,3 +189,9 @@ func TestIdentity_Labels(t *testing.T) {
 	assert.Equal(t, "my-saas", labels["claustro.project"])
 	assert.Equal(t, "backend", labels["claustro.name"])
 }
+
+func TestLabels_IncludesHostPath(t *testing.T) {
+	id := &Identity{Project: "myapp", Name: "calm_river", HostPath: "/Users/peter/projects/myapp"}
+	labels := id.Labels()
+	assert.Equal(t, "/Users/peter/projects/myapp", labels[LabelHostPath])
+}

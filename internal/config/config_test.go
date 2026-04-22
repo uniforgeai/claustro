@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -288,4 +289,44 @@ git:
 	assert.False(t, cfg.Git.IsForwardAgent())
 	assert.Empty(t, cfg.ImageConfig.Extra)
 	assert.Empty(t, cfg.Sandboxes)
+}
+
+func TestPauseConfig_Defaults(t *testing.T) {
+	var p PauseConfig
+	assert.True(t, p.IsEnabled(), "pause should default to enabled")
+	assert.Equal(t, 5*time.Minute, p.Timeout())
+}
+
+func TestPauseConfig_OptOut(t *testing.T) {
+	f := false
+	p := PauseConfig{Enabled: &f}
+	assert.False(t, p.IsEnabled())
+}
+
+func TestPauseConfig_CustomTimeout(t *testing.T) {
+	p := PauseConfig{IdleTimeout: 30 * time.Second}
+	assert.Equal(t, 30*time.Second, p.Timeout())
+}
+
+func TestLoad_PauseConfigFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	content := `
+pause:
+  enabled: false
+  idle_timeout: 10m
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte(content), 0o644))
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+	assert.False(t, cfg.Pause.IsEnabled())
+	assert.Equal(t, 10*time.Minute, cfg.Pause.Timeout())
+}
+
+func TestLoad_PauseConfigDefaultsWhenAbsent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte("project: foo"), 0o644))
+	cfg, err := Load(dir)
+	require.NoError(t, err)
+	assert.True(t, cfg.Pause.IsEnabled())
+	assert.Equal(t, 5*time.Minute, cfg.Pause.Timeout())
 }
