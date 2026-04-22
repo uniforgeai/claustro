@@ -5,11 +5,14 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,7 +25,14 @@ import (
 	"github.com/uniforgeai/claustro/internal/mcp"
 )
 
-const defaultTimeout = 5 * time.Minute
+const (
+	defaultTimeout  = 5 * time.Minute
+	daemonProcName  = "claustrod"
+)
+
+// errAnotherRunning signals that another claustrod process owns the pidfile.
+// Run() treats this as a clean exit, not an error.
+var errAnotherRunning = errors.New("another claustrod instance is already running")
 
 // Run is the daemon entrypoint. Returns when no claustro containers remain or
 // when ctx is cancelled. Logs go to ~/.claustro/claustrod.log (stderr is
@@ -43,6 +53,10 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("pidfile path: %w", err)
 	}
 	if err := writePidFile(pidPath); err != nil {
+		if errors.Is(err, errAnotherRunning) {
+			slog.Info("another claustrod already running, exiting")
+			return nil
+		}
 		return fmt.Errorf("writing pidfile: %w", err)
 	}
 	defer os.Remove(pidPath) //nolint:errcheck
@@ -56,7 +70,11 @@ func Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case now := <-ticker.C:
-			done, err := tick(ctx, cli, &state, now)
+			var (
+				done bool
+				err  error
+			)
+			state, done, err = tick(ctx, cli, state, now)
 			if err != nil {
 				slog.Warn("daemon tick", "err", err)
 				continue
@@ -69,16 +87,18 @@ func Run(ctx context.Context) error {
 	}
 }
 
-// tick performs one poll cycle. Returns done=true when no claustro containers exist.
-func tick(ctx context.Context, cli *client.Client, state *map[string]Track, now time.Time) (bool, error) {
+// tick performs one poll cycle. Returns the updated state, done=true when no
+// claustro containers exist, and any transient error.
+func tick(ctx context.Context, cli *client.Client, state map[string]Track, now time.Time) (map[string]Track, bool, error) {
 	containers, err := listClaustroContainers(ctx, cli)
 	if err != nil {
-		return false, err
+		return state, false, err
 	}
 	if len(containers) == 0 {
-		return true, nil
+		return state, true, nil
 	}
 
+	containerByID := make(map[string]containertypes.Summary, len(containers))
 	views := make([]ContainerView, 0, len(containers))
 	for _, c := range containers {
 		view, ok := buildView(ctx, cli, c)
@@ -86,21 +106,25 @@ func tick(ctx context.Context, cli *client.Client, state *map[string]Track, now 
 			continue
 		}
 		views = append(views, view)
+		containerByID[c.ID] = c
 	}
 
-	toPause, newState := Decide(*state, views, now, defaultTimeout)
-	*state = newState
+	toPause, newState := Decide(state, views, now, defaultTimeout)
 
 	for _, id := range toPause {
+		parent, known := containerByID[id]
 		if err := container.Pause(ctx, cli, id); err != nil {
 			slog.Warn("pausing container", "id", id, "err", err)
-			(*state)[id] = Track{LastActive: now} // back off retrying
+			// Back off one cycle before retrying.
+			newState[id] = Track{LastActive: now, PrevState: newState[id].PrevState}
 			continue
 		}
 		slog.Info("paused idle sandbox", "id", id)
-		pauseSiblings(ctx, cli, id, containers)
+		if known {
+			pauseSiblings(ctx, cli, parent)
+		}
 	}
-	return false, nil
+	return newState, false, nil
 }
 
 // listClaustroContainers returns containers labeled by the sandbox role
@@ -167,29 +191,19 @@ func buildView(ctx context.Context, cli *client.Client, c containertypes.Summary
 }
 
 // pauseSiblings pauses the MCP SSE siblings of the given parent.
-func pauseSiblings(ctx context.Context, cli *client.Client, parentID string, all []containertypes.Summary) {
-	var parent containertypes.Summary
-	for _, c := range all {
-		if c.ID == parentID {
-			parent = c
-			break
-		}
-	}
-	if parent.ID == "" {
-		return
-	}
+func pauseSiblings(ctx context.Context, cli *client.Client, parent containertypes.Summary) {
 	id := &identity.Identity{
 		Project: parent.Labels[identity.LabelProject],
 		Name:    parent.Labels[identity.LabelName],
 	}
 	siblings, err := mcp.ListSSESiblings(ctx, cli, id)
 	if err != nil {
-		slog.Warn("listing siblings for pause", "parent", parentID, "err", err)
+		slog.Warn("listing siblings for pause", "parent", parent.ID, "err", err)
 		return
 	}
 	for _, sib := range siblings {
 		if err := container.Pause(ctx, cli, sib.ID); err != nil {
-			slog.Warn("pausing MCP sibling", "parent", parentID, "sibling", sib.ID, "err", err)
+			slog.Warn("pausing MCP sibling", "parent", parent.ID, "sibling", sib.ID, "err", err)
 		}
 	}
 }
@@ -206,8 +220,33 @@ func pidFilePath() (string, error) {
 	return filepath.Join(dir, "claustrod.pid"), nil
 }
 
+// writePidFile claims the pidfile atomically via O_EXCL. If another process
+// already owns the file and is alive (verified by PID + process-name match),
+// returns errAnotherRunning so the caller can exit cleanly. A stale pidfile
+// (file exists but process is gone or not claustrod) is removed and retried.
 func writePidFile(path string) error {
-	return os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o600)
+	content := []byte(strconv.Itoa(os.Getpid()))
+	for attempt := 0; attempt < 2; attempt++ {
+		f, err := os.OpenFile(path, os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, werr := f.Write(content)
+			cerr := f.Close()
+			if werr != nil {
+				return werr
+			}
+			return cerr
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		if IsAlive() {
+			return errAnotherRunning
+		}
+		if rmErr := os.Remove(path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			return rmErr
+		}
+	}
+	return errors.New("could not claim pidfile after retry")
 }
 
 // setupLogging routes slog output to ~/.claustro/claustrod.log (append).
@@ -231,13 +270,9 @@ func setupLogging() error {
 	return nil
 }
 
-// IsAlive returns true when a daemon process is recorded in the pidfile and is
-// reachable (signal 0). False if no pidfile or stale.
-//
-// Note: this is not race-free. Two simultaneous `claustro up` invocations can
-// both observe IsAlive==false and both spawn a daemon. The damage is minor: a
-// duplicate poll loop until one notices the same pidfile got rewritten and
-// exits next tick. v1 accepts this; flock-based singleton is a follow-up.
+// IsAlive returns true when the pidfile references a live claustrod process.
+// False when no pidfile exists, the PID is stale, or the PID belongs to a
+// different program (guards against PID reuse by unrelated processes).
 func IsAlive() bool {
 	path, err := pidFilePath()
 	if err != nil {
@@ -247,7 +282,7 @@ func IsAlive() bool {
 	if err != nil {
 		return false
 	}
-	pid, err := strconv.Atoi(string(data))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		return false
 	}
@@ -255,5 +290,20 @@ func IsAlive() bool {
 	if err != nil {
 		return false
 	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	if err := proc.Signal(syscall.Signal(0)); err != nil {
+		return false
+	}
+	return isClaustrodProcess(pid)
+}
+
+// isClaustrodProcess shells out to `ps` to confirm the given PID is running
+// claustrod. Works on both Linux and Darwin (where /proc is not available).
+func isClaustrodProcess(pid int) bool {
+	out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return false
+	}
+	name := strings.TrimSpace(string(out))
+	// `ps comm=` may emit the full path; compare by basename.
+	return filepath.Base(name) == daemonProcName
 }

@@ -110,16 +110,17 @@ func runUp(ctx context.Context, name string, cliOverrides config.CLIOverrides) e
 	}
 	defer cli.Close() //nolint:errcheck
 
-	id, _, resolved, alreadyRunning, err := ensureRunning(ctx, cli, id, nameWasEmpty, false, cliOverrides, host)
+	result, err := ensureRunning(ctx, cli, id, nameWasEmpty, false, cliOverrides, host)
 	if err != nil {
 		return err
 	}
-	if alreadyRunning {
+	if result.AlreadyRunning {
 		return nil
 	}
+	id = result.ID
 
 	fmt.Printf("Sandbox started: %s\n", id.ContainerName())
-	fmt.Printf("  Resources: %s CPU / %s memory\n", resourcesCPUString(resolved, host), resourcesMemoryString(resolved, host))
+	fmt.Printf("  Resources: %s CPU / %s memory\n", resourcesCPUString(result.SandboxConfig, host), resourcesMemoryString(result.SandboxConfig, host))
 	if nameWasEmpty {
 		fmt.Printf("  Name: %s  (use --name %s to target it)\n", id.Name, id.Name)
 		fmt.Printf("  Run: claustro shell  --name %s\n", id.Name)
@@ -149,30 +150,42 @@ func ensureDaemon() {
 	}
 }
 
+// ensureRunningResult carries the outputs of ensureRunning. Using a struct
+// instead of a positional tuple keeps call sites readable and avoids the
+// blind-underscore positional mismatch when new fields are added.
+type ensureRunningResult struct {
+	// ID is the resolved identity. May differ from the input when the name was
+	// auto-generated and collided, triggering a rename.
+	ID *identity.Identity
+	// ProjectConfig is the loaded claustro.yaml (always populated on success).
+	ProjectConfig *config.Config
+	// SandboxConfig is the resolved per-sandbox config. Non-nil only when the
+	// container was freshly created (AlreadyRunning == false).
+	SandboxConfig *config.SandboxConfig
+	// AlreadyRunning is true when the container was already Up and no creation
+	// was performed.
+	AlreadyRunning bool
+}
+
 // ensureRunning ensures a sandbox container is running for the given identity.
-// If the sandbox is already running, it returns alreadyRunning=true and takes no action.
-// When quiet is true, output is minimal (suitable for auto-up from the claude command).
-// The returned identity may differ from the input if the name was auto-generated and
-// required retry due to a collision. The loaded *config.Config (project config) is
-// returned so callers can inspect project settings (e.g. enabled agents) without
-// re-loading. The *config.SandboxConfig (resolved per-sandbox config) is returned
-// only on the freshly-created path; nil when alreadyRunning is true.
-func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool, cliOverrides config.CLIOverrides, host *sysinfo.Host) (_ *identity.Identity, _ *config.Config, _ *config.SandboxConfig, alreadyRunning bool, _ error) {
+// When the sandbox is already running, returns AlreadyRunning=true and SandboxConfig=nil.
+// When quiet is true, output is minimal (suitable for auto-up from the claude/codex command).
+func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identity, nameWasEmpty, quiet bool, cliOverrides config.CLIOverrides, host *sysinfo.Host) (*ensureRunningResult, error) {
 	cfg, err := config.Load(id.HostPath)
 	if err != nil {
-		return nil, nil, nil, false, fmt.Errorf("loading config: %w", err)
+		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	existing, err := container.FindByIdentity(ctx, cli, id)
 	if err != nil {
-		return nil, nil, nil, false, fmt.Errorf("finding sandbox: %w", err)
+		return nil, fmt.Errorf("finding sandbox: %w", err)
 	}
 	if existing != nil && strings.Contains(existing.Status, "Up") {
 		if !quiet {
 			fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
 		}
 		ensureDaemon()
-		return id, cfg, nil, true, nil
+		return &ensureRunningResult{ID: id, ProjectConfig: cfg, AlreadyRunning: true}, nil
 	}
 
 	// If the name was auto-generated and a container with that name already exists,
@@ -181,7 +194,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	if nameWasEmpty && existing != nil {
 		id, err = generateUniqueName(ctx, cli)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, err
 		}
 	}
 
@@ -191,12 +204,12 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 
 	dotenv, err := config.LoadDotenv(id.HostPath)
 	if err != nil {
-		return nil, nil, nil, false, fmt.Errorf("loading .env: %w", err)
+		return nil, fmt.Errorf("loading .env: %w", err)
 	}
 
 	resolved, err := cfg.Resolve(id.HostPath, cliOverrides, dotenv)
 	if err != nil {
-		return nil, nil, nil, false, fmt.Errorf("resolving config: %w", err)
+		return nil, fmt.Errorf("resolving config: %w", err)
 	}
 	slog.Debug("resolved sandbox config",
 		"name", resolved.Name,
@@ -208,7 +221,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 
 	opts, err := buildImageIfNeeded(ctx, cli, id, cfg)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, err
 	}
 	opts.Firewall = resolved.Firewall
 	opts.CPUs = resolved.CPUs
@@ -217,16 +230,16 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 
 	mounts, err := setupVolumesAndMounts(ctx, cli, id, cfg, resolved)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, err
 	}
 
 	slog.Info("creating sandbox", "container", id.ContainerName())
 	containerID, err := container.Create(ctx, cli, id, mounts, opts)
 	if err != nil {
-		return nil, nil, nil, false, fmt.Errorf("creating container: %w", err)
+		return nil, fmt.Errorf("creating container: %w", err)
 	}
 	if err := container.Start(ctx, cli, containerID); err != nil {
-		return nil, nil, nil, false, fmt.Errorf("starting container: %w", err)
+		return nil, fmt.Errorf("starting container: %w", err)
 	}
 
 	// Start MCP SSE sibling containers (non-fatal on failure).
@@ -240,11 +253,11 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	}
 
 	if err := applyFirewall(ctx, cli, containerID, id, cfg, resolved.Firewall); err != nil {
-		return nil, nil, nil, false, err
+		return nil, err
 	}
 
 	ensureDaemon()
-	return id, cfg, resolved, false, nil
+	return &ensureRunningResult{ID: id, ProjectConfig: cfg, SandboxConfig: resolved}, nil
 }
 
 // generateUniqueName retries random name generation up to maxNameRetries times

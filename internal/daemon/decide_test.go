@@ -73,3 +73,30 @@ func TestDecide_RemovedContainersDroppedFromState(t *testing.T) {
 	_, ok := newState["c2"]
 	assert.False(t, ok, "c2 should be dropped from state when no longer listed")
 }
+
+func TestDecide_PausedToRunningResetsTimerAndSkipsPause(t *testing.T) {
+	// A container that was paused on the previous tick and is now running
+	// (e.g. manual `docker unpause` or attach auto-resume) must not be
+	// re-paused immediately — it gets a fresh grace period.
+	state := map[string]Track{"c1": {LastActive: t0.Add(-10 * time.Minute), PrevState: "paused"}}
+	containers := []ContainerView{{ID: "c1", State: "running", ActiveExecCount: 0, Timeout: 5 * time.Minute}}
+	toPause, newState := Decide(state, containers, t0, 5*time.Minute)
+	assert.Empty(t, toPause, "paused→running should skip pause this tick")
+	assert.Equal(t, t0, newState["c1"].LastActive, "timer should refresh on transition")
+	assert.Equal(t, "running", newState["c1"].PrevState)
+}
+
+func TestDecide_PrevStateRecordedForEveryBranch(t *testing.T) {
+	// Every container in newState must record the current observed state,
+	// otherwise paused→running detection breaks on the following tick.
+	state := map[string]Track{}
+	containers := []ContainerView{
+		{ID: "active", State: "running", ActiveExecCount: 1, Timeout: 5 * time.Minute},
+		{ID: "paused", State: "paused", ActiveExecCount: 0, Timeout: 5 * time.Minute},
+		{ID: "grace", State: "running", ActiveExecCount: 0, Timeout: 5 * time.Minute},
+	}
+	_, newState := Decide(state, containers, t0, 5*time.Minute)
+	assert.Equal(t, "running", newState["active"].PrevState)
+	assert.Equal(t, "paused", newState["paused"].PrevState)
+	assert.Equal(t, "running", newState["grace"].PrevState)
+}

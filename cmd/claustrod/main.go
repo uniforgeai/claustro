@@ -25,8 +25,8 @@ func main() {
 	root.AddCommand(&cobra.Command{
 		Use:   "run",
 		Short: "Run the claustrod poll loop",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+		RunE: func(_ *cobra.Command, _ []string) error {
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 			return daemon.Run(ctx)
 		},

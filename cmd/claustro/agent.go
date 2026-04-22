@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,13 +121,17 @@ func runAgent(ctx context.Context, nameFlag string, spec AgentSpec, extraArgs []
 		}
 	}
 
-	host, _ := sysinfo.Detect()
-	id, cfg, _, _, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
+	host, hostErr := sysinfo.Detect()
+	if hostErr != nil {
+		slog.Debug("host detection partial, using fallback for missing fields", "err", hostErr)
+	}
+	result, err := ensureRunning(ctx, cli, id, nameWasEmpty, true, config.CLIOverrides{Name: nameFlag}, host)
 	if err != nil {
 		return err
 	}
+	id = result.ID
 
-	if err := checkAgentEnabled(cfg, spec); err != nil {
+	if err := checkAgentEnabled(result.ProjectConfig, spec); err != nil {
 		return err
 	}
 

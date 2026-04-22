@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 // EnsureRunning checks the pidfile; if no live daemon, spawns a new one detached.
@@ -35,22 +36,11 @@ func EnsureRunning(claustrodPath string) error {
 // LookupBinary resolves the claustrod binary path.
 // Looks first next to the current claustro binary, then in PATH.
 func LookupBinary() (string, error) {
-	exe, err := os.Executable()
-	if err == nil {
-		dir := exe[:lastSlash(exe)]
-		candidate := dir + "/claustrod"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "claustrod")
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate, nil
 		}
 	}
 	return exec.LookPath("claustrod")
-}
-
-func lastSlash(s string) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '/' {
-			return i
-		}
-	}
-	return 0
 }
