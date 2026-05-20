@@ -9,7 +9,8 @@ weight: 2
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Forwarded to sandbox for Claude Code auth |
+| `ANTHROPIC_API_KEY` | Forwarded to sandbox for Claude Code auth when set |
+| `OPENAI_API_KEY` | Forwarded to sandbox for Codex CLI auth when set |
 | `DOCKER_HOST` | Docker daemon connection (if non-default) |
 
 ## Sandbox environment

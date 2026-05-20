@@ -123,6 +123,22 @@ func TestExtHash_DifferentSteps(t *testing.T) {
 	assert.NotEqual(t, h1, h2)
 }
 
+func TestImageBuildHash_ConfigSensitive(t *testing.T) {
+	enabled := true
+	disabled := false
+	a := config.ImageBuildConfig{Languages: config.LanguagesConfig{Go: &enabled}}
+	b := config.ImageBuildConfig{Languages: config.LanguagesConfig{Go: &disabled}}
+
+	assert.NotEqual(t, imageBuildHash(&a), imageBuildHash(&b))
+}
+
+func TestBaseImageLabelsIncludeConfigHash(t *testing.T) {
+	cfg := config.DefaultImageBuildConfig()
+	labels := baseImageLabels(&cfg)
+
+	assert.Equal(t, imageBuildHash(&cfg), labels["claustro.image-config-hash"])
+}
+
 func TestExtBuildContext_ContainsDockerfile(t *testing.T) {
 	steps := []string{"apt-get install -y ffmpeg", "pip install black"}
 	ctx, err := extBuildContext(steps)

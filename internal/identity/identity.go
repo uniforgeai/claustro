@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Label key constants used across packages for Docker container labels.
@@ -47,6 +49,9 @@ func FromCWD(name string) (*Identity, error) {
 func fromPath(path, name string) (*Identity, error) {
 	basename := filepath.Base(path)
 	slug := slugify(basename)
+	if override := projectOverride(path); override != "" {
+		slug = override
+	}
 	if slug == "" {
 		return nil, fmt.Errorf("cannot derive project slug from path %q", path)
 	}
@@ -121,4 +126,20 @@ func (id *Identity) Labels() map[string]string {
 		LabelName:     id.Name,
 		LabelHostPath: id.HostPath,
 	}
+}
+
+type projectConfig struct {
+	Project string `yaml:"project"`
+}
+
+func projectOverride(path string) string {
+	data, err := os.ReadFile(filepath.Join(path, "claustro.yaml"))
+	if err != nil {
+		return ""
+	}
+	var cfg projectConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return ""
+	}
+	return slugify(cfg.Project)
 }

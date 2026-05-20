@@ -24,11 +24,23 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+  - id: claustrod
+    main: ./cmd/claustrod
+    binary: claustrod
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
 
 archives:
   - id: claustro
     builds:
       - claustro
+      - claustrod
     format_overrides:
       - goos: darwin
         format: zip
@@ -64,9 +76,10 @@ brews:
         private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     homepage: "https://github.com/uniforgeai/claustro"
     description: "Disposable Docker sandboxes for Claude Code"
-    license: "MIT"
+    license: "BUSL-1.1"
     install: |
       bin.install "claustro"
+      bin.install "claustrod"
     test: |
       system "#{bin}/claustro", "--help"
 

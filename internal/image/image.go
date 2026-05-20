@@ -40,7 +40,7 @@ const ImageName = "claustro:latest"
 // EnsureBuilt checks whether the claustro image exists and builds it if not.
 // Build output is written to w.
 func EnsureBuilt(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig, w io.Writer) error {
-	exists, err := imageExists(ctx, cli)
+	exists, err := imageExists(ctx, cli, imgCfg)
 	if err != nil {
 		return fmt.Errorf("checking image: %w", err)
 	}
@@ -58,13 +58,16 @@ func Build(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildCon
 	return buildImage(ctx, cli, imgCfg, true, w)
 }
 
-func imageExists(ctx context.Context, cli *client.Client) (bool, error) {
+func imageExists(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig) (bool, error) {
 	args := filters.NewArgs(filters.Arg("reference", ImageName))
 	images, err := cli.ImageList(ctx, imagetypes.ListOptions{Filters: args})
 	if err != nil {
 		return false, err
 	}
-	return len(images) > 0, nil
+	if len(images) == 0 {
+		return false, nil
+	}
+	return images[0].Labels["claustro.image-config-hash"] == imageBuildHash(imgCfg), nil
 }
 
 func buildImage(ctx context.Context, cli *client.Client, imgCfg *config.ImageBuildConfig, noCache bool, w io.Writer) error {
@@ -78,6 +81,7 @@ func buildImage(ctx context.Context, cli *client.Client, imgCfg *config.ImageBui
 		Dockerfile: "Dockerfile",
 		Remove:     true,
 		NoCache:    noCache,
+		Labels:     baseImageLabels(imgCfg),
 	})
 	if err != nil {
 		return fmt.Errorf("starting image build: %w", err)
@@ -85,6 +89,25 @@ func buildImage(ctx context.Context, cli *client.Client, imgCfg *config.ImageBui
 	defer resp.Body.Close() //nolint:errcheck
 
 	return streamBuildOutput(resp.Body, w)
+}
+
+func baseImageLabels(imgCfg *config.ImageBuildConfig) map[string]string {
+	return map[string]string{
+		"claustro.image-config-hash": imageBuildHash(imgCfg),
+	}
+}
+
+func imageBuildHash(imgCfg *config.ImageBuildConfig) string {
+	if imgCfg == nil {
+		defaultCfg := config.DefaultImageBuildConfig()
+		imgCfg = &defaultCfg
+	}
+	data, err := json.Marshal(imgCfg)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // buildContext creates an in-memory tar archive containing the Dockerfile and init script.

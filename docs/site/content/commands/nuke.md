@@ -5,16 +5,16 @@ weight: 11
 
 # claustro nuke
 
-Remove a sandbox and its cache volumes. Preserves the image.
+Remove all sandboxes and cache volumes for the current project. Preserves the image.
 
 ## Usage
 
 ```bash
-claustro nuke [name] [flags]
+claustro nuke [flags]
 ```
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--all` | Nuke all sandboxes for the current project |
+| `--all` | Nuke sandboxes across all projects |
