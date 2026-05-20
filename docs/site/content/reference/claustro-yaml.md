@@ -18,6 +18,7 @@ Complete reference for the claustro configuration file.
 | `firewall` | mapping | Egress firewall configuration |
 | `mcp` | mapping | MCP server configuration |
 | `git` | mapping | Git integration settings |
+| `pause` | mapping | Idle auto-pause settings |
 
 ## image
 
@@ -73,6 +74,8 @@ image:
 | `resources.cpus` | string | "4" | CPU limit |
 | `resources.memory` | string | "8G" | Memory limit |
 
+When `resources.cpus` or `resources.memory` are omitted, claustro uses host-aware defaults based on the current machine.
+
 ## sandboxes
 
 Named sandbox definitions. Each key is a sandbox name.
@@ -113,3 +116,10 @@ Named sandbox definitions. Each key is a sandbox name.
 | `mount_gitconfig` | bool | true | Mount ~/.gitconfig (read-only) |
 | `mount_gh_config` | bool | true | Mount ~/.config/gh/ |
 | `mount_ssh_dir` | bool | false | Mount ~/.ssh/ (explicit opt-in) |
+
+## pause
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | true | Allow `claustrod` to pause idle sandboxes |
+| `idle_timeout` | duration | 5m | Idle time before auto-pause |

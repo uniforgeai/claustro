@@ -13,11 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"golang.org/x/term"
 	dockertypes "github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -30,6 +30,7 @@ import (
 	"github.com/uniforgeai/claustro/internal/image"
 	claustromount "github.com/uniforgeai/claustro/internal/mount"
 	"github.com/uniforgeai/claustro/internal/sysinfo"
+	"golang.org/x/term"
 )
 
 // Default resource limits applied when no config override is provided.
@@ -40,14 +41,14 @@ const (
 
 // Magic-number constants used across container operations.
 const (
-	defaultStopTimeout = 10                            // seconds to wait before SIGKILL
-	networkDriver      = "bridge"                      // Docker network driver
-	containerUser      = "sandbox"                     // user inside container
-	noNewPrivileges    = "no-new-privileges:true"      // security option
-	capNetAdmin        = "NET_ADMIN"                   // capability for firewall
-	nanosecondsPerCPU  = 1e9                           // nanoseconds per 1 CPU
-	containerWorkdir   = "/workspace"                  // working directory for exec
-	containerHome      = "/home/sandbox"               // home directory inside container
+	defaultStopTimeout = 10                       // seconds to wait before SIGKILL
+	networkDriver      = "bridge"                 // Docker network driver
+	containerUser      = "sandbox"                // user inside container
+	noNewPrivileges    = "no-new-privileges:true" // security option
+	capNetAdmin        = "NET_ADMIN"              // capability for firewall
+	nanosecondsPerCPU  = 1e9                      // nanoseconds per 1 CPU
+	containerWorkdir   = "/workspace"             // working directory for exec
+	containerHome      = "/home/sandbox"          // home directory inside container
 )
 
 // CreateOptions configures optional parameters for container creation.
@@ -67,10 +68,12 @@ type CreateOptions struct {
 	// Host is the detected host machine. When set and CPUs/Memory are empty,
 	// resource caps are computed proportional to the host.
 	Host *sysinfo.Host
+	// Env contains resolved project, dotenv, sandbox, and CLI environment variables.
+	Env map[string]string
 }
 
 // sandboxEnv assembles environment variables for a new sandbox container.
-func sandboxEnv(hostPath string) []string {
+func sandboxEnv(hostPath string, extra map[string]string) []string {
 	env := []string{
 		"CLAUSTRO_HOST_PATH=" + hostPath,
 		"HOME=" + containerHome,
@@ -79,10 +82,18 @@ func sandboxEnv(hostPath string) []string {
 		env = append(env, "SSH_AUTH_SOCK="+claustromount.SSHAgentContainerSock(sock))
 	}
 	// Forward API keys from host environment.
-	for _, key := range []string{"OPENAI_API_KEY"} {
+	for _, key := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY"} {
 		if val := os.Getenv(key); val != "" {
 			env = append(env, key+"="+val)
 		}
+	}
+	keys := make([]string, 0, len(extra))
+	for key := range extra {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = append(env, key+"="+extra[key])
 	}
 	return env
 }
@@ -99,12 +110,12 @@ func Create(ctx context.Context, cli *client.Client, id *identity.Identity, moun
 		imageName = image.ImageName
 	}
 
-	env := sandboxEnv(id.HostPath)
+	env := sandboxEnv(id.HostPath, opts.Env)
 
 	cfg := &containertypes.Config{
-		Image:  imageName,
-		Labels: id.Labels(),
-		Env:    env,
+		Image:        imageName,
+		Labels:       id.Labels(),
+		Env:          env,
 		Tty:          false,
 		AttachStdin:  false,
 		AttachStdout: false,

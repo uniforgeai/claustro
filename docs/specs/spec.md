@@ -404,7 +404,8 @@ The system SHALL enforce security best practices by default.
 
 #### Scenario: Non-root user
 
-- **THEN** all processes inside the container run as a non-root user (uid 1000)
+- **THEN** interactive shell, Claude, Codex, and one-off exec processes run as a non-root user (uid 1000)
+- **AND** the container entrypoint may start as root only long enough to prepare mounts, permissions, and firewall rules before handing off to the sandbox user
 
 #### Scenario: No privilege escalation
 
@@ -413,7 +414,7 @@ The system SHALL enforce security best practices by default.
 #### Scenario: Resource limits
 
 - **THEN** the container has configurable CPU and memory limits
-- **AND** defaults to 4 CPUs and 8 GB memory
+- **AND** absent explicit limits, defaults are derived from the host with a conservative cap
 
 ---
 

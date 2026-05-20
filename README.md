@@ -52,7 +52,7 @@ claustro fills that gap with a lightweight, CLI-driven sandbox that understands 
 ## Installation
 
 ```bash
-go install github.com/uniforgeai/claustro/cmd/claustro@latest
+go install github.com/uniforgeai/claustro/cmd/...@latest
 ```
 
 Or build from source:
@@ -94,6 +94,7 @@ claustro burn
 | `claustro up`     | Create and start a sandbox container             |
 | `claustro shell`  | Open an interactive shell in a running sandbox   |
 | `claustro claude` | Launch Claude Code inside the sandbox            |
+| `claustro codex`  | Launch Codex CLI inside the sandbox              |
 | `claustro exec`   | Run a command inside the sandbox                 |
 | `claustro status` | Show sandbox status                              |
 | `claustro ls`     | List all sandboxes                               |

@@ -165,6 +165,8 @@ type ensureRunningResult struct {
 	// AlreadyRunning is true when the container was already Up and no creation
 	// was performed.
 	AlreadyRunning bool
+	// StartedExisting is true when an existing stopped container was started.
+	StartedExisting bool
 }
 
 // ensureRunning ensures a sandbox container is running for the given identity.
@@ -180,12 +182,22 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	if err != nil {
 		return nil, fmt.Errorf("finding sandbox: %w", err)
 	}
-	if existing != nil && strings.Contains(existing.Status, "Up") {
+	if existing != nil && containerStatusIsUp(existing.Status) {
 		if !quiet {
 			fmt.Printf("Sandbox %q is already running (%s)\n", id.ContainerName(), existing.Status)
 		}
 		ensureDaemon()
 		return &ensureRunningResult{ID: id, ProjectConfig: cfg, AlreadyRunning: true}, nil
+	}
+	if existing != nil && shouldStartExistingContainer(nameWasEmpty, existing.Status) {
+		if quiet {
+			fmt.Fprintf(os.Stderr, "Starting sandbox %s...\n", id.ContainerName())
+		}
+		if err := container.Start(ctx, cli, existing.ID); err != nil {
+			return nil, fmt.Errorf("starting existing container: %w", err)
+		}
+		ensureDaemon()
+		return &ensureRunningResult{ID: id, ProjectConfig: cfg, StartedExisting: true}, nil
 	}
 
 	// If the name was auto-generated and a container with that name already exists,
@@ -227,6 +239,7 @@ func ensureRunning(ctx context.Context, cli *client.Client, id *identity.Identit
 	opts.CPUs = resolved.CPUs
 	opts.Memory = resolved.Memory
 	opts.Host = host
+	opts.Env = resolved.Env
 
 	mounts, err := setupVolumesAndMounts(ctx, cli, id, cfg, resolved)
 	if err != nil {
@@ -280,11 +293,26 @@ func generateUniqueName(ctx context.Context, cli *client.Client) (*identity.Iden
 	return nil, fmt.Errorf("could not generate a unique sandbox name after %d attempts — try: claustro up --name <name>", maxNameRetries)
 }
 
+func containerStatusIsUp(status string) bool {
+	return strings.Contains(status, "Up")
+}
+
+func shouldStartExistingContainer(nameWasEmpty bool, status string) bool {
+	return !nameWasEmpty && !containerStatusIsUp(status)
+}
+
 // buildImageIfNeeded checks whether a custom extended image or the base image
 // needs to be built, and returns CreateOptions with ImageName set accordingly.
 func buildImageIfNeeded(ctx context.Context, cli *client.Client, id *identity.Identity, cfg *config.Config) (container.CreateOptions, error) {
 	var opts container.CreateOptions
+	if cfg.ImageName != "" {
+		opts.ImageName = cfg.ImageName
+		return opts, nil
+	}
 	if len(cfg.ImageConfig.Extra) > 0 {
+		if err := image.EnsureBuilt(ctx, cli, &cfg.ImageBuild, os.Stdout); err != nil {
+			return opts, fmt.Errorf("building image: %w", err)
+		}
 		steps := extraRunSteps(cfg.ImageConfig.Extra)
 		if err := image.EnsureExtended(ctx, cli, id.Project, steps, os.Stdout); err != nil {
 			return opts, fmt.Errorf("building extension image: %w", err)
@@ -302,10 +330,11 @@ func buildImageIfNeeded(ctx context.Context, cli *client.Client, id *identity.Id
 // isolated state and package caches.
 func setupVolumesAndMounts(ctx context.Context, cli *client.Client, id *identity.Identity, cfg *config.Config, resolved *config.SandboxConfig) ([]mount.Mount, error) {
 	socketDir := filepath.Join(os.TempDir(), "claustro-"+id.ContainerName())
-	mounts, err := internalMount.Assemble(id.HostPath, &cfg.Git, socketDir, resolved.ReadOnly, resolved.IsolatedState)
+	mounts, err := internalMount.Assemble(workspaceHostPath(id.HostPath, resolved.Workdir), &cfg.Git, socketDir, resolved.ReadOnly, resolved.IsolatedState)
 	if err != nil {
 		return nil, fmt.Errorf("assembling mounts: %w", err)
 	}
+	mounts = append(mounts, dockerMountsFromResolved(resolved.Mounts)...)
 
 	// When isolated state is requested, create a project-scoped volume for Claude state.
 	if resolved.IsolatedState {
@@ -341,6 +370,29 @@ func setupVolumesAndMounts(ctx context.Context, cli *client.Client, id *identity
 	}
 
 	return mounts, nil
+}
+
+func workspaceHostPath(projectRoot, workdir string) string {
+	if workdir == "" {
+		return filepath.Clean(projectRoot)
+	}
+	if filepath.IsAbs(workdir) {
+		return filepath.Clean(workdir)
+	}
+	return filepath.Clean(filepath.Join(projectRoot, workdir))
+}
+
+func dockerMountsFromResolved(resolved []config.Mount) []mount.Mount {
+	out := make([]mount.Mount, 0, len(resolved))
+	for _, m := range resolved {
+		out = append(out, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   m.HostPath,
+			Target:   m.ContainerPath,
+			ReadOnly: m.ReadOnly,
+		})
+	}
+	return out
 }
 
 // applyFirewall applies egress firewall rules if enabled. On failure it stops

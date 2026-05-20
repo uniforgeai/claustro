@@ -71,10 +71,14 @@ func updateHomebrew() (string, error) {
 
 func updateGoInstall() (string, error) {
 	slog.Info("updating via go install")
-	cmd := exec.Command("go", "install", "github.com/uniforgeai/claustro/cmd/claustro@latest")
+	cmd := exec.Command("go", "install", goInstallPackagePattern())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("go install failed: %w\n%s", err, string(out))
 	}
 	return "Updated via go install", nil
+}
+
+func goInstallPackagePattern() string {
+	return "github.com/uniforgeai/claustro/cmd/...@latest"
 }

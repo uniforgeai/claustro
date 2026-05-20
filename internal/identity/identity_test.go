@@ -4,6 +4,8 @@
 package identity
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -62,6 +64,16 @@ func Test_fromPath(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "my-project", id.Project)
 		assert.Regexp(t, adjNounPattern, id.Name, "auto-generated name should match adjective_noun pattern")
+	})
+
+	t.Run("project override from claustro.yaml", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "claustro.yaml"), []byte("project: My SaaS\n"), 0o644))
+
+		id, err := fromPath(dir, "api")
+		require.NoError(t, err)
+		assert.Equal(t, "my-saas", id.Project)
+		assert.Equal(t, "api", id.Name)
 	})
 }
 

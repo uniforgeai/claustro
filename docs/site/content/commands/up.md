@@ -18,7 +18,7 @@ claustro up [flags]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--name` | Sandbox name | auto-generated |
-| `--workdir` | Working directory | project root |
+| `--workdir` | Host subdirectory to mount at `/workspace` | project root |
 | `--mount` | Additional bind mount (repeatable) | none |
 | `--env` | Environment variable KEY=VALUE (repeatable) | none |
 | `--readonly` | Mount source read-only | false |

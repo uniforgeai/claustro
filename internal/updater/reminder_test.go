@@ -56,6 +56,8 @@ func TestShouldCheck(t *testing.T) {
 }
 
 func TestLoadCache_MissingFile(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	// LoadCache should return zero value when file doesn't exist
 	cache := LoadCache()
 	assert.True(t, cache.LastCheck.IsZero())

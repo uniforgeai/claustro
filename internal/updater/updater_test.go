@@ -21,3 +21,7 @@ func TestUpdate_UnknownMethod_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot auto-update")
 	assert.Contains(t, err.Error(), "github.com/uniforgeai/claustro/releases")
 }
+
+func TestGoInstallPackagePatternIncludesDaemon(t *testing.T) {
+	assert.Equal(t, "github.com/uniforgeai/claustro/cmd/...@latest", goInstallPackagePattern())
+}
